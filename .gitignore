@@ -1,0 +1,11 @@
+# Build outputs
+build/
+*.o
+*.a
+*.part
+*.raw
+.mshot.raw
+
+# OS files
+.DS_Store
+Thumbs.db
