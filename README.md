@@ -131,17 +131,22 @@ Once complete, the AXP221 PMIC will update its internal learned capacity registe
 
 ## 🛠️ Building from Source
 
-The binary is compiled using the Windows-hosted **Arm GNU Toolchain 13.3** (`arm-none-linux-gnueabihf`) targeting Miyoo's glibc 2.28:
+The repository is self-contained with its own build and packaging scripts:
 
 ```sh
-# Ensure toolchain and Onion source tree are present
-./build_batmonui.sh
+# Build binary (requires ARM GNU Toolchain 13.3 in PATH)
+./build.sh
+
+# Build and generate release ZIP in dist/
+./package.sh
 ```
 
-Key build flags:
-- Dynamic executable with custom startup code (`start.S` / `start_init.c` from `tools-miyoo`).
+Key build flags & configuration:
+- Dynamic executable with custom startup code (`start.S` / `start_init.c`).
 - Glibc compatibility wrapper (`stat64` wrapped to `__xstat64@GLIBC_2.4`).
 - Stripped binary size: ~50 KB.
+
+For full technical details, version history, and architecture roadmap, see **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 
