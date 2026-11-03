@@ -33,6 +33,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2026-11-03
 
 ### Added
+- **Live `SESSION` Duration Counting:**
+  - Solved the legacy issue where `SESSION` playtime froze on the current level until the battery percentage dropped by 1% (or until the 10-minute database flush).
+  - Actively advances the current level's awake duration on the fly so `SESSION` ticks up smoothly minute-by-minute during gameplay.
+  - Automatically preserves sleep separation (`+3h10 SLEEP`) without corrupting active gameplay time.
+- **Direct `SIGCONT` Wake Handling:**
+  - Added dedicated `SIGCONT` signal handler inside the application.
+  - Instantly queries AXP221 registers via I2C and recomputes telemetry and graphs the millisecond the console wakes up from sleep, without depending on system daemons.
+- **Atomic 16-Bit I2C Register Reads:**
+  - Implemented 2-byte burst I2C reads (`axp_i2c_read16`) for all 16-bit PMIC registers (`0xE0/0xE1`, `0xE2/0xE3`, `0x78/0x79`, `0x7A/0x7B`, `0x7C/0x7D`).
+  - Completely eliminates register tearing and display jitter (e.g. `0 <-> 250 mAh` energy flicker).
+- **Coulomb Counter (CC) Activation via Calibration:**
+  - Starting battery calibration explicitly enables both Fuel Gauge and Coulomb Counter (`0xB8 |= 0xC0 | 0x20`).
+  - Automatically seeds design capacity into `0xE0/0xE1` if uninitialized.
+  - When calibration finishes or is stopped, the Coulomb Counter remains permanently active (`0xC0`) to continuously track real mAh.
+- **Streamlined Graph Footer Hint:**
+  - Added two-line centered navigation prompt `BATTERY MENU` (pastel blue) and `[SELECT]` (white) in `font_Arkhip`, seamlessly aligned with session and voltage labels without background boxing.
+- **Interactive Battery Test Modal:**
+  - Added 4th action item `[ A: Battery test ]` with comprehensive player notice regarding temporary screen dimming and Wi-Fi turn-off for clean baseline measurements.
 - **Live AXP221 PMIC Telemetry & Fuel Gauge Overlay (`[SELECT]` Button):**
   - **Real-Time Telemetry (1 Hz poll):**
     - High-precision cell voltage in millivolts (registers `0x78/0x79`).
@@ -96,3 +114,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed-window time zoom on `[L1]/[R1]`.
 - Linear battery drain projection (`LEFT`).
 - All-time record session display (`BEST`).
+

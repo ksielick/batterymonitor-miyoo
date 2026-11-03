@@ -31,11 +31,19 @@ static TTF_Font *font_tiny = NULL;
 // AXP221 Telemetry & Menu State
 static bool show_axp_menu = false;
 static bool axp_confirm_calib = false;
-static int axp_menu_selected = 0; // 0: capacity, 1: sync 100%, 2: calibrate
+static bool axp_confirm_btest = false;
+static int axp_menu_selected = 0; // 0: capacity, 1: sync 100%, 2: calibrate, 3: battery test
 static int axp_edit_capacity = 2600;
 static Uint32 axp_last_poll = 0;
 static char axp_feedback_msg[64] = "";
 static Uint32 axp_feedback_until = 0;
+static volatile sig_atomic_t sigcont_received = 0;
+
+static void sigcont_handler(int sig)
+{
+    (void)sig;
+    sigcont_received = 1;
+}
 
 typedef struct {
     bool available;
@@ -548,8 +556,10 @@ bool read_battery_voltage(void)
     }
 
     if (DEVICE_ID == MIYOO354) {
-        if (voltage > 0)
-            snprintf(text, sizeof(text), "%d.%02dV", voltage / 1000, (voltage % 1000) / 10);
+        if (voltage > 0) {
+            int cv = (voltage + 5) / 10;
+            snprintf(text, sizeof(text), "%d.%02dV", cv / 100, cv % 100);
+        }
     }
     else if (voltage > 148 && charging == 0) {
         // MIYOO283: while charging batmon stores no reading (the ADC value is 100)
@@ -610,6 +620,19 @@ void compute_graph(void)
                     int bat_perc = sqlite3_column_int(stmt, 2);
                     int duration = sqlite3_column_int(stmt, 3);
                     bool is_charging = sqlite3_column_int(stmt, 4);
+
+                    // when the entry began (batmon logs it since 2026-11), 0 when unknown
+                    long long row_time = 0;
+                    if (sqlite3_column_count(stmt) > 5 && sqlite3_column_type(stmt, 5) != SQLITE_NULL)
+                        row_time = sqlite3_column_int64(stmt, 5);
+
+                    // For the newest row, batmon only writes duration upon percentage change or every 10 min.
+                    // Advance duration with live elapsed awake time so SESSION updates smoothly on the fly.
+                    if (first_run && !is_charging && row_time > 0 && newer_row_time > row_time) {
+                        int live_elapsed = (int)(newer_row_time - row_time);
+                        if (live_elapsed > duration)
+                            duration = live_elapsed;
+                    }
 
                     // CURRENT: the newest entry only. Testing total_duration == 0 also
                     // caught the entry before it, as the newest one has duration 0 until
@@ -700,10 +723,6 @@ void compute_graph(void)
                     // at the time its level ended, so a stretch ends at its newest row
                     // and starts at the newest row of the other kind before it.
                     int raw_level = sqlite3_column_int(stmt, 2); // 500+ while charging on the Mini
-                    // when the entry began (batmon logs it since 2026-11), 0 when unknown
-                    long long row_time = 0;
-                    if (sqlite3_column_count(stmt) > 5 && sqlite3_column_type(stmt, 5) != SQLITE_NULL)
-                        row_time = sqlite3_column_int64(stmt, 5);
                     if (run_end_index >= 0 && is_charging != run_charging) {
                         // the newest stretch always (it is going on); others only when
                         // longer than a charger flicker
@@ -872,6 +891,19 @@ static int axp_i2c_read(int fd, unsigned char reg)
     return val;
 }
 
+static int axp_i2c_read16(int fd, unsigned char reg)
+{
+    unsigned char buf[2] = { 0, 0 };
+    struct i2c_msg msgs[2] = {
+        { AXP_ADDR, 0, 1, &reg },
+        { AXP_ADDR, I2C_M_RD, 2, buf },
+    };
+    struct i2c_rdwr_ioctl_data d = { msgs, 2 };
+    if (ioctl(fd, I2C_RDWR, &d) < 0)
+        return -1;
+    return (buf[0] << 8) | buf[1];
+}
+
 static int axp_i2c_write(int fd, unsigned char reg, unsigned char val)
 {
     unsigned char buf[2] = { reg, val };
@@ -903,19 +935,15 @@ static bool axp_poll_data(void)
         return false;
     }
 
-    int e0 = axp_i2c_read(fd, REG_AXP_E0);
-    int e1 = axp_i2c_read(fd, REG_AXP_E1);
-    int e2 = axp_i2c_read(fd, REG_AXP_E2);
-    int e3 = axp_i2c_read(fd, REG_AXP_E3);
+    // Atomic 16-bit reads to avoid register tearing across bytes
+    int e01 = axp_i2c_read16(fd, REG_AXP_E0);
+    int e23 = axp_i2c_read16(fd, REG_AXP_E2);
     int e4 = axp_i2c_read(fd, REG_AXP_E4);
     int e5 = axp_i2c_read(fd, REG_AXP_E5);
 
-    int vh = axp_i2c_read(fd, 0x78);
-    int vl = axp_i2c_read(fd, 0x79);
-    int dh = axp_i2c_read(fd, 0x7C);
-    int dl = axp_i2c_read(fd, 0x7D);
-    int ch = axp_i2c_read(fd, 0x7A);
-    int cl = axp_i2c_read(fd, 0x7B);
+    int v12 = axp_i2c_read16(fd, 0x78);
+    int d12 = axp_i2c_read16(fd, 0x7C);
+    int c12 = axp_i2c_read16(fd, 0x7A);
     int st01 = axp_i2c_read(fd, 0x01);
 
     close(fd);
@@ -927,13 +955,16 @@ static bool axp_poll_data(void)
     axp_status.cal_stat = (b8 >> 4) & 1;
     axp_status.battery_pct = b9 & 0x7F;
 
-    if (vh >= 0 && vl >= 0)
-        axp_status.voltage_mv = (int)(((vh << 4) | (vl & 0x0F)) * 1.1 + 0.5);
-    else
+    if (v12 >= 0) {
+        int v_raw = ((v12 >> 8) << 4) | (v12 & 0x0F);
+        axp_status.voltage_mv = (int)(v_raw * 1.1 + 0.5);
+    }
+    else {
         axp_status.voltage_mv = 0;
+    }
 
-    int dis_ma = (dh >= 0 && dl >= 0) ? ((dh << 4) | (dl & 0x0F)) : 0;
-    int chg_ma = (ch >= 0 && cl >= 0) ? ((ch << 4) | (cl & 0x0F)) : 0;
+    int dis_ma = (d12 >= 0) ? (((d12 >> 8) << 4) | (d12 & 0x0F)) : 0;
+    int chg_ma = (c12 >= 0) ? (((c12 >> 8) << 4) | (c12 & 0x0F)) : 0;
     bool is_charging = (st01 >= 0) ? ((st01 >> 6) & 1) : false;
     axp_status.is_charging = is_charging;
     if (is_charging && chg_ma > 0)
@@ -941,12 +972,12 @@ static bool axp_poll_data(void)
     else
         axp_status.current_ma = -dis_ma;
 
-    if (e0 >= 0 && e1 >= 0) {
-        int raw_cap = ((e0 & 0x7F) << 8) | e1;
+    if (e01 >= 0) {
+        int raw_cap = e01 & 0x7FFF;
         axp_status.capacity_mah = (int)(raw_cap * 1.456 + 0.5);
     }
-    if (e2 >= 0 && e3 >= 0) {
-        int raw_cc = ((e2 & 0x7F) << 8) | e3;
+    if (e23 >= 0) {
+        int raw_cc = e23 & 0x7FFF;
         axp_status.cc_mah = (int)(raw_cc * 1.456 + 0.5);
     }
 
@@ -965,6 +996,11 @@ static bool axp_set_capacity(int mah)
     ioctl(fd, I2C_TIMEOUT, 5);
     ioctl(fd, I2C_RETRIES, 1);
 
+    int b8 = axp_i2c_read(fd, REG_AXP_CTL);
+    if (b8 >= 0 && (b8 & 0xC0) != 0xC0) {
+        axp_i2c_write(fd, REG_AXP_CTL, (unsigned char)(b8 | 0xC0));
+    }
+
     int units = (int)((mah / 1.456) + 0.5);
     unsigned char hi = 0x80 | ((units >> 8) & 0x7F);
     unsigned char lo = units & 0xFF;
@@ -982,6 +1018,11 @@ static bool axp_set_coulomb_counter(int mah)
     if (fd < 0) return false;
     ioctl(fd, I2C_TIMEOUT, 5);
     ioctl(fd, I2C_RETRIES, 1);
+
+    int b8 = axp_i2c_read(fd, REG_AXP_CTL);
+    if (b8 >= 0 && (b8 & 0xC0) != 0xC0) {
+        axp_i2c_write(fd, REG_AXP_CTL, (unsigned char)(b8 | 0xC0));
+    }
 
     int units = (int)((mah / 1.456) + 0.5);
     unsigned char hi = 0x80 | ((units >> 8) & 0x7F);
@@ -1006,9 +1047,20 @@ static bool axp_set_calibration(bool on)
         close(fd);
         return false;
     }
+    // Always keep Gauge (bit 7) and Coulomb Counter (bit 6) enabled
     unsigned char new_b8 = (unsigned char)((b8 | 0xC0));
-    if (on)
+    if (on) {
         new_b8 |= 0x20;
+        // If design capacity is unconfigured or zero, initialize it with selected capacity
+        int e01 = axp_i2c_read16(fd, REG_AXP_E0);
+        if (e01 <= 0 || (e01 & 0x7FFF) == 0) {
+            int units = (int)((axp_edit_capacity / 1.456) + 0.5);
+            unsigned char hi = 0x80 | ((units >> 8) & 0x7F);
+            unsigned char lo = units & 0xFF;
+            axp_i2c_write(fd, REG_AXP_E0, hi);
+            axp_i2c_write(fd, REG_AXP_E1, lo);
+        }
+    }
     else
         new_b8 &= ~0x20;
 
@@ -1177,53 +1229,62 @@ static void renderAxpMenu(void)
     drawKeyValueLine("Calibration:", cal_stat_str, tbl_font, col_lbl, axp_status.cal_stat ? col_green : col_sub, rx + 12, 92 + 4 * 34, card_w - 24);
 
     // Section 2: Settings & Actions (expanded and clearly spaced)
-    renderText("BATTERY SETTINGS & ACTIONS", font_Arkhip, col_header, &(SDL_Rect){25, 276, 300, 18});
+    renderText("BATTERY SETTINGS & ACTIONS", font_Arkhip, col_header, &(SDL_Rect){25, 274, 300, 18});
 
     // Item 0: Capacity
     bool sel0 = (axp_menu_selected == 0);
-    drawRectFill(25, 296, 590, 32, sel0 ? col_sel_bg : col_card_bg);
-    if (sel0) drawFrame2px(25, 296, 590, 32, col_sel_border);
-    else drawFrame1px(25, 296, 590, 32, col_card_border);
+    drawRectFill(25, 294, 590, 31, sel0 ? col_sel_bg : col_card_bg);
+    if (sel0) drawFrame2px(25, 294, 590, 31, col_sel_border);
+    else drawFrame1px(25, 294, 590, 31, col_card_border);
 
-    if (sel0) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 302, 15, 20});
-    renderText("Battery Capacity:", font_Arkhip, col_val, &(SDL_Rect){50, 302, 180, 20});
+    if (sel0) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 299, 15, 20});
+    renderText("Battery Capacity:", font_Arkhip, col_val, &(SDL_Rect){50, 299, 180, 20});
 
     char cap_edit_str[32];
     snprintf(cap_edit_str, sizeof(cap_edit_str), "<  %d mAh  >", axp_edit_capacity);
-    renderTextAlignRight(cap_edit_str, font_Arkhip, col_cyan, &(SDL_Rect){605, 302, 150, 20});
+    renderTextAlignRight(cap_edit_str, font_Arkhip, col_cyan, &(SDL_Rect){605, 299, 150, 20});
     if (sel0) {
-        renderText("[LEFT/RIGHT] Change  [A] Save", font_small ? font_small : font_Arkhip, col_sub, &(SDL_Rect){215, 304, 210, 16});
+        renderText("[LEFT/RIGHT] Change  [A] Save", font_small ? font_small : font_Arkhip, col_sub, &(SDL_Rect){215, 301, 210, 16});
     }
 
     // Item 1: Sync 100%
     bool sel1 = (axp_menu_selected == 1);
-    drawRectFill(25, 334, 590, 32, sel1 ? col_sel_bg : col_card_bg);
-    if (sel1) drawFrame2px(25, 334, 590, 32, col_sel_border);
-    else drawFrame1px(25, 334, 590, 32, col_card_border);
+    drawRectFill(25, 329, 590, 31, sel1 ? col_sel_bg : col_card_bg);
+    if (sel1) drawFrame2px(25, 329, 590, 31, col_sel_border);
+    else drawFrame1px(25, 329, 590, 31, col_card_border);
 
-    if (sel1) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 340, 15, 20});
-    drawCenteredText("[ A: Set current capacity to 100% ]", font_Arkhip, sel1 ? col_val : col_sub, 25, 340, 590);
+    if (sel1) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 334, 15, 20});
+    drawCenteredText("[ A: Set current capacity to 100% ]", font_Arkhip, sel1 ? col_val : col_sub, 25, 334, 590);
 
     // Item 2: Calibrate
     bool sel2 = (axp_menu_selected == 2);
-    drawRectFill(25, 372, 590, 32, sel2 ? col_sel_bg : col_card_bg);
-    if (sel2) drawFrame2px(25, 372, 590, 32, col_sel_border);
-    else drawFrame1px(25, 372, 590, 32, col_card_border);
+    drawRectFill(25, 364, 590, 31, sel2 ? col_sel_bg : col_card_bg);
+    if (sel2) drawFrame2px(25, 364, 590, 31, col_sel_border);
+    else drawFrame1px(25, 364, 590, 31, col_card_border);
 
-    if (sel2) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 378, 15, 20});
+    if (sel2) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 369, 15, 20});
     const char *cal_btn_txt = axp_status.cal_en ? "[ A: Stop battery calibration ]" : "[ A: Calibrate battery ]";
-    drawCenteredText(cal_btn_txt, font_Arkhip, sel2 ? (axp_status.cal_en ? col_warn : col_val) : col_sub, 25, 378, 590);
+    drawCenteredText(cal_btn_txt, font_Arkhip, sel2 ? (axp_status.cal_en ? col_warn : col_val) : col_sub, 25, 369, 590);
 
-    // Toast feedback message
+    // Item 3: Battery test
+    bool sel3 = (axp_menu_selected == 3);
+    drawRectFill(25, 399, 590, 31, sel3 ? col_sel_bg : col_card_bg);
+    if (sel3) drawFrame2px(25, 399, 590, 31, col_sel_border);
+    else drawFrame1px(25, 399, 590, 31, col_card_border);
+
+    if (sel3) renderText(">", font_Arkhip, col_cyan, &(SDL_Rect){35, 404, 15, 20});
+    drawCenteredText("[ A: Battery test ]", font_Arkhip, sel3 ? col_val : col_sub, 25, 404, 590);
+
+    // Toast feedback message (floating at top of screen)
     if (axp_feedback_until > 0 && axp_feedback_msg[0] != '\0') {
         int tw = 0, th = 0;
         TTF_SizeUTF8(font_small ? font_small : font_Arkhip, axp_feedback_msg, &tw, &th);
         int bx = 320 - (tw + 30) / 2;
         Uint32 t_bg = SDL_MapRGB(screen->format, 20, 50, 30);
         Uint32 t_border = SDL_MapRGB(screen->format, 60, 180, 90);
-        drawRectFill(bx, 410, tw + 30, 26, t_bg);
-        drawFrame1px(bx, 410, tw + 30, 26, t_border);
-        drawCenteredText(axp_feedback_msg, font_small ? font_small : font_Arkhip, col_green, bx, 414, tw + 30);
+        drawRectFill(bx, 44, tw + 30, 24, t_bg);
+        drawFrame1px(bx, 44, tw + 30, 24, t_border);
+        drawCenteredText(axp_feedback_msg, font_small ? font_small : font_Arkhip, col_green, bx, 48, tw + 30);
     }
 
     // Footer Badges
@@ -1231,7 +1292,7 @@ static void renderAxpMenu(void)
     drawBadgePill("[A] Confirm / Save", font_small ? font_small : font_Arkhip, col_val, col_pill_bg, col_pill_border, 220, 444, 160, 26);
     drawBadgePill("[B / SELECT] Back to Graph", font_small ? font_small : font_Arkhip, col_val, col_pill_bg, col_pill_border, 395, 444, 220, 26);
 
-    // Modal Confirmation Dialog
+    // Modal Confirmation Dialog (Calibration)
     if (axp_confirm_calib) {
         dimScreen(190);
         int mw = 520, mh = 290, mx = 60, my = 95;
@@ -1249,9 +1310,10 @@ static void renderAxpMenu(void)
         drawRectFill(ib_x, ib_y, ib_w, ib_h, ib_bg);
         drawFrame1px(ib_x, ib_y, ib_w, ib_h, ib_border);
 
-        renderText("1. Connect charger and charge to 100% until charge stops.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 14, ib_w - 32, 20});
-        renderText("2. Disconnect charger and play normally until console powers off.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 40, ib_w - 32, 20});
-        renderText("3. Charge back to 100% in one continuous charge.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 66, ib_w - 32, 20});
+        renderText("1. Enables hardware Coulomb Counter (CC) & learning cycle.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 14, ib_w - 32, 20});
+        renderText("2. Connect charger and charge to 100% until charge stops.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 40, ib_w - 32, 20});
+        renderText("3. Discharge until console powers off, then recharge to 100%.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 66, ib_w - 32, 20});
+        renderText("4. Learned capacity updates automatically in AXP221 silicon.", font_small ? font_small : font_Arkhip, col_green, &(SDL_Rect){ib_x + 16, ib_y + 92, ib_w - 32, 20});
         renderText("The PMIC will automatically learn your battery's true capacity.", font_small ? font_small : font_Arkhip, col_sub, &(SDL_Rect){ib_x + 16, ib_y + 98, ib_w - 32, 16});
 
         // Two Action Buttons at Modal bottom
@@ -1264,6 +1326,49 @@ static void renderAxpMenu(void)
         drawFrame2px(b1_x, btn_y, btn_w, btn_h, b1_border);
         const char *m_act_txt = axp_status.cal_en ? "[A] Stop Calibration" : "[A] Start Calibration";
         drawCenteredText(m_act_txt, font_Arkhip, col_val, b1_x, btn_y + 8, btn_w);
+
+        // Button 2 (Cancel)
+        int b2_x = mx + mw - 35 - btn_w;
+        Uint32 b2_bg = SDL_MapRGB(screen->format, 45, 45, 55);
+        Uint32 b2_border = SDL_MapRGB(screen->format, 90, 90, 110);
+        drawRectFill(b2_x, btn_y, btn_w, btn_h, b2_bg);
+        drawFrame2px(b2_x, btn_y, btn_w, btn_h, b2_border);
+        drawCenteredText("[B] Cancel", font_Arkhip, col_val, b2_x, btn_y + 8, btn_w);
+    }
+
+    // Modal Confirmation Dialog (Battery Health Test)
+    if (axp_confirm_btest) {
+        dimScreen(190);
+        int mw = 520, mh = 296, mx = 60, my = 92;
+        Uint32 m_bg = SDL_MapRGB(screen->format, 12, 20, 32);
+        Uint32 m_border = SDL_MapRGB(screen->format, 220, 140, 50);
+        drawRectFill(mx, my, mw, mh, m_bg);
+        drawFrame2px(mx, my, mw, mh, m_border);
+
+        drawCenteredText("BATTERY HEALTH TEST", font_title ? font_title : font_Arkhip, col_val, mx, my + 16, mw);
+        drawCenteredText("Hardware stress test & internal resistance check", font_small ? font_small : font_Arkhip, col_warn, mx, my + 42, mw);
+
+        int ib_x = mx + 20, ib_y = my + 68, ib_w = mw - 40, ib_h = 138;
+        Uint32 ib_bg = SDL_MapRGB(screen->format, 18, 28, 44);
+        Uint32 ib_border = SDL_MapRGB(screen->format, 40, 60, 90);
+        drawRectFill(ib_x, ib_y, ib_w, ib_h, ib_bg);
+        drawFrame1px(ib_x, ib_y, ib_w, ib_h, ib_border);
+
+        renderText("NOTICE FOR PLAYERS:", font_small ? font_small : font_Arkhip, col_warn, &(SDL_Rect){ib_x + 16, ib_y + 12, ib_w - 32, 18});
+        renderText("1. Wi-Fi will be turned off and the screen will dim temporarily.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 34, ib_w - 32, 18});
+        renderText("   This eliminates power noise to accurately measure cell health.", font_small ? font_small : font_Arkhip, col_sub, &(SDL_Rect){ib_x + 16, ib_y + 54, ib_w - 32, 18});
+        renderText("2. The CPU will run at max load (up to 1600 MHz) to detect sag.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 76, ib_w - 32, 18});
+        renderText("3. Original brightness & Wi-Fi will be restored afterwards.", font_small ? font_small : font_Arkhip, col_green, &(SDL_Rect){ib_x + 16, ib_y + 102, ib_w - 32, 18});
+
+        // Two Action Buttons at Modal bottom
+        int btn_w = 210, btn_h = 38, btn_y = my + 232;
+        // Button 1 (Start Test)
+        int b1_x = mx + 35;
+        Uint32 b1_bg = SDL_MapRGB(screen->format, 25, 65, 35);
+        Uint32 b1_border = SDL_MapRGB(screen->format, 60, 180, 90);
+        drawRectFill(b1_x, btn_y, btn_w, btn_h, b1_bg);
+        drawFrame2px(b1_x, btn_y, btn_w, btn_h, b1_border);
+        drawCenteredText("[A] Start Test", font_Arkhip, col_val, b1_x, btn_y + 8, btn_w);
 
         // Button 2 (Cancel)
         int b2_x = mx + mw - 35 - btn_w;
@@ -1401,6 +1506,10 @@ void renderPage()
     renderTextAlignRight(session_left, font_Arkhip, color_white, &(SDL_Rect){LABEL_LEFT_X, LABEL_LEFT_Y, LABEL_SIZE_X, LABEL_SIZE_Y});
     renderTextAlignRight(session_best, font_Arkhip, color_white, &(SDL_Rect){LABEL_BEST_X, LABEL_BEST_Y, LABEL_SIZE_X, LABEL_SIZE_Y});
 
+    // Center footer hint: Battery Menu / [SELECT]
+    drawCenteredText("BATTERY MENU", font_Arkhip, color_pastel_blue, 210, LABEL_SESSION_Y, 220);
+    drawCenteredText("[SELECT]", font_Arkhip, color_white, 210, LABEL_CURRENT_Y, 220);
+
     int half_line_width = (int)(GRAPH_LINE_WIDTH) / 2;
 
     Uint32 white_pixel_color = SDL_MapRGBA(screen->format, 255, 255, 255, 0);
@@ -1507,6 +1616,7 @@ void renderPage()
 int main(int argc, char *argv[])
 {
     init();
+    signal(SIGCONT, sigcont_handler);
     KeyState keystate[320] = {(KeyState)0};
     render_waiting_screen();
 
@@ -1538,9 +1648,14 @@ int main(int argc, char *argv[])
         Uint32 now = SDL_GetTicks();
         // Onion's sleep stops every process (SIGSTOP) and continues them on wake, batmon
         // included, which then reads the battery at its next 15 s check. A long gap
-        // between passes means we were stopped: check now, then every second for a
-        // while, so the new reading shows as soon as batmon logs it.
-        if ((Sint32)(now - last_pass) > WAKE_GAP_MS) {
+        // between passes or SIGCONT means we were stopped: query AXP221 immediately and recompute.
+        if (sigcont_received || (Sint32)(now - last_pass) > WAKE_GAP_MS) {
+            sigcont_received = 0;
+            axp_poll_data();
+            reset_graph();
+            compute_graph();
+            read_battery_voltage();
+            changed = true;
             next_check = now;
             fast_checks_until = now + WAKE_FAST_CHECK_MS;
         }
@@ -1561,6 +1676,15 @@ int main(int argc, char *argv[])
             // a new session (charger in or out) shifts the list: keep the choice valid
             if (selected_session >= session_mark_count)
                 selected_session = session_mark_count - 1;
+            changed = true;
+        }
+
+        // Periodic clock advance: keep SESSION ticking live even while battery % remains constant
+        static Uint32 last_clock_tick = 0;
+        if ((Sint32)(now - last_clock_tick) >= 15000) {
+            last_clock_tick = now;
+            reset_graph();
+            compute_graph();
             changed = true;
         }
 
@@ -1586,7 +1710,7 @@ int main(int argc, char *argv[])
                         bool new_state = !axp_status.cal_en;
                         if (axp_set_calibration(new_state)) {
                             snprintf(axp_feedback_msg, sizeof(axp_feedback_msg),
-                                     "Calibration %s", new_state ? "started" : "stopped");
+                                     new_state ? "CC & Calibration started!" : "Calibration stopped (CC stays on)");
                         }
                         else {
                             snprintf(axp_feedback_msg, sizeof(axp_feedback_msg),
@@ -1599,6 +1723,18 @@ int main(int argc, char *argv[])
                     }
                     else if (keystate[SW_BTN_SELECT] == PRESSED) {
                         axp_confirm_calib = false;
+                        changed = true;
+                    }
+                }
+                else if (axp_confirm_btest) {
+                    if (keystate[SW_BTN_B] == PRESSED || keystate[SW_BTN_SELECT] == PRESSED) {
+                        axp_confirm_btest = false;
+                        changed = true;
+                    }
+                    else if (keystate[SW_BTN_A] == PRESSED) {
+                        axp_confirm_btest = false;
+                        snprintf(axp_feedback_msg, sizeof(axp_feedback_msg), "Battery test starting...");
+                        axp_feedback_until = now + 3000;
                         changed = true;
                     }
                 }
@@ -1620,7 +1756,7 @@ int main(int argc, char *argv[])
                         }
                     }
                     else if (keystate[SW_BTN_DOWN] >= PRESSED) {
-                        if (axp_menu_selected < 2) {
+                        if (axp_menu_selected < 3) {
                             axp_menu_selected++;
                             changed = true;
                         }
@@ -1674,12 +1810,19 @@ int main(int argc, char *argv[])
                             changed = true;
                         }
                     }
+                    else if (axp_menu_selected == 3) {
+                        if (keystate[SW_BTN_A] == PRESSED) {
+                            axp_confirm_btest = true;
+                            changed = true;
+                        }
+                    }
                 }
             }
             else {
                 if (keystate[SW_BTN_SELECT] == PRESSED) {
                     show_axp_menu = true;
                     axp_confirm_calib = false;
+                    axp_confirm_btest = false;
                     axp_menu_selected = 0;
                     axp_poll_data();
                     if (axp_status.available && axp_status.capacity_mah >= 1500 && axp_status.capacity_mah <= 4000)
