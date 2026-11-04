@@ -42,7 +42,7 @@ enum {
     AXP_MENU_COUNT
 };
 static int axp_menu_selected = AXP_MENU_CAPACITY;
-static int axp_edit_capacity = 2600;
+static int axp_edit_capacity = 3000;
 static int axp_edit_voff = 3; // REG 31H bits 2-0 code: 0..7 -> 2.6..3.3 V (default 3 = 2.9 V)
 #define AXP_VOFF_CODE_MAX 5   // UI limit: 3.1 V (3.2/3.3 V would waste too much usable capacity)
 static Uint32 axp_last_poll = 0;
@@ -2246,14 +2246,16 @@ int main(int argc, char *argv[])
                     }
                     else if (axp_menu_selected == AXP_MENU_CAPACITY) {
                         if (keystate[SW_BTN_LEFT] >= PRESSED) {
-                            if (axp_edit_capacity > 1500) {
-                                axp_edit_capacity -= 50;
+                            int next = ((axp_edit_capacity - 1) / 50) * 50;
+                            if (next >= 1500) {
+                                axp_edit_capacity = next;
                                 changed = true;
                             }
                         }
                         else if (keystate[SW_BTN_RIGHT] >= PRESSED) {
-                            if (axp_edit_capacity < 4000) {
-                                axp_edit_capacity += 50;
+                            int next = (axp_edit_capacity / 50 + 1) * 50;
+                            if (next <= 4000) {
+                                axp_edit_capacity = next;
                                 changed = true;
                             }
                         }
@@ -2337,8 +2339,16 @@ int main(int argc, char *argv[])
                     axp_confirm_btest = false;
                     axp_menu_selected = AXP_MENU_CAPACITY;
                     axp_poll_data();
-                    if (axp_status.available && axp_status.capacity_mah >= 1500 && axp_status.capacity_mah <= 4000)
-                        axp_edit_capacity = axp_status.capacity_mah;
+                    if (axp_status.available && axp_status.capacity_mah >= 1500 && axp_status.capacity_mah <= 4000) {
+                        int rounded = ((axp_status.capacity_mah + 25) / 50) * 50;
+                        if (abs(axp_status.capacity_mah - rounded) <= 1)
+                            axp_edit_capacity = rounded;
+                        else
+                            axp_edit_capacity = 3000;
+                    }
+                    else {
+                        axp_edit_capacity = 3000;
+                    }
                     if (axp_status.available && axp_status.voff_code >= 0)
                         axp_edit_voff = axp_status.voff_code;
                     changed = true;
