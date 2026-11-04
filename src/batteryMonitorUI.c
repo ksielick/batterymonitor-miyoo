@@ -3,6 +3,8 @@
 
 #include "../batmon/batmonDB.h"
 #include <pthread.h>
+#define _LARGEFILE64_SOURCE 1
+#include <sys/stat.h>
 
 static bool quit = false;
 static int current_zoom = 1;
@@ -644,6 +646,15 @@ void compute_graph(void)
                     if (sqlite3_column_count(stmt) > 5 && sqlite3_column_type(stmt, 5) != SQLITE_NULL)
                         row_time = sqlite3_column_int64(stmt, 5);
 
+                    // On stock OnionOS, batmon does not log start_time (it is NULL in SQLite).
+                    // Derive row_time from log file mtime: mtime is when batmon last wrote
+                    // this row's duration, so (mtime - duration) is when this row began.
+                    if (first_run && row_time <= 0) {
+                        struct stat st;
+                        if (stat(BATTERY_LOG_FILE, &st) == 0 && st.st_mtime > 0)
+                            row_time = (long long)st.st_mtime - duration;
+                    }
+
                     // For the newest row, batmon only writes duration upon percentage change or every 10 min.
                     // Advance duration with live elapsed awake time so SESSION updates smoothly on the fly.
                     if (first_run && !is_charging && row_time > 0 && newer_row_time > row_time) {
@@ -844,6 +855,8 @@ void compute_graph(void)
                     m->sleep_drop = run_sleep_drop;
                 }
             }
+            if (session_duration[0] == '\0')
+                secondsToHoursMinutes(total_duration, session_duration);
             sqlite3_finalize(stmt);
             close_battery_log_db();
         }
