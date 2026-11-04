@@ -9,30 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - Planned / Roadmap
 
-### Planned: Dual-Core CPU Stress Benchmark & Battery Health Diagnostic (SoH)
-- **Interactive Stress Test under [SELECT] Menu:**
-  - Automated 3-stage load testing to analyze real-world power draw and battery degradation:
-    - **Stage 1 (Pure Idle Baseline):** Automatically disables Wi-Fi (`ifconfig wlan0 down` to eliminate ~150 mA radio/USB transceiver power and RF packet bursts) and dims display backlight to minimum (PWM 0). Establishes a rock-solid, noise-free idle baseline (~120–150 mA @ 400 MHz).
-    - **Stage 2 (Stock Dual-Core 1200 MHz):** Spawns 2 worker pthreads executing a high-density ALU / NEON vector loop at 100% load on both Cortex-A7 cores at factory clock (1200 MHz).
-    - **Stage 3 (Overclock Dual-Core 1600 MHz):** Dynamically switches MPLL DFS registers to 1600 MHz via `/dev/mem` (using the proven `cpuclock` interface).
-  - **Battery Condition & Internal Resistance ($R_{int}$) Calculation:**
-    - Measures instantaneous voltage sag under heavy surge current:
-      $$\Delta V = V_{idle} - V_{load},\quad \Delta I = I_{load} - I_{idle}$$
-    - Calculates internal DC series resistance:
-      $$R_{int} = \frac{\Delta V}{\Delta I}\quad [\text{m}\Omega]$$
-    - Diagnoses degraded or aging cells: batteries with high internal resistance ($R_{int} > 300\text{--}500\text{ m}\Omega$) exhibit severe voltage drops under 1600 MHz bursts, identifying cells at risk of brownouts or sudden shutdowns in demanding games.
-    - Rates battery health condition: **EXCELLENT** ($< 160\text{ m}\Omega$), **GOOD** ($160\text{--}260\text{ m}\Omega$), **AGED** ($260\text{--}380\text{ m}\Omega$), or **POOR / REPLACE** ($> 380\text{ m}\Omega$).
-  - **Accelerated Discharge Tool:** Accelerates battery drain for calibration cycles without having to leave a game running for 5 hours.
-  - **Fail-Safe Safeguards:**
-    - Automatic cutoff if battery voltage drops to the 3.49V cliff.
-    - Cancel anytime with `[B]`.
-    - Guaranteed restoration of original Wi-Fi state, screen brightness, stock CPU clock, and `ondemand` governor upon completion or abort.
+### Planned
+- **Wi-Fi off during the battery health test** (`ifconfig wlan0 down` + guaranteed restore) for an even quieter idle baseline.
+- **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
 
 ---
 
 ## [2.0.1] - 2026-11-04
 
 ### Added
+- **Battery Health Test (`[ A: Battery test ]`):** 3-stage internal resistance measurement, ~45 s total:
+  - Stage 1: idle baseline (screen dimmed to Onion level 0, app idle under `ondemand`).
+  - Stage 2: 2 worker pthreads at 100% load on both Cortex-A7 cores at 1200 MHz.
+  - Stage 3: same load at 1600 MHz, switched with Onion's own `cpuclock` tool.
+  - Each stage lasts 15 s; only samples after a 7 s settle time (4 Hz) are averaged.
+  - $R_{int} = (V_{idle} - V_{load}) / (I_{load} - I_{idle})$, rated **EXCELLENT** (< 160 mΩ), **GOOD** (< 260), **AGED** (< 380), **POOR / REPLACE**.
+  - Safeguards: refuses to start below 3.60 V or with the charger connected; aborts below 3.50 V, on charger plug-in, on sleep, or with `[B]`. Original CPU clock, governor and brightness are restored on finish, abort, MENU exit, SIGTERM and `atexit`.
 - **Shutdown Voltage setting (`Voff`, REG 31H bits 2-0):** new `[SELECT]` menu row `Shutdown Voltage: < 2.9 V >`, adjustable 2.6–3.1 V in 0.1 V steps with `[LEFT/RIGHT]`, saved with `[A]` and verified by read-back. The write preserves only bits 7 and 4; self-triggering bits 6 (soft restart), 5 (soft wakeup) and 3 (sleep wakeup) are always written as 0.
 
 ### Fixed

@@ -2,6 +2,7 @@
 #include "system/device_model.h"
 
 #include "../batmon/batmonDB.h"
+#include <pthread.h>
 
 static bool quit = false;
 static int current_zoom = 1;
@@ -1137,6 +1138,295 @@ static int axp_set_calibration(bool on)
     return (((check >> 5) & 1) == (on ? 1 : 0)) ? 0 : -2;
 }
 
+// ---------------------------------------------------------------------------
+// Battery health test: internal resistance from voltage sag under CPU load.
+//   Stage 0: idle baseline (app idle, ondemand governor, screen dimmed)
+//   Stage 1: 2 worker threads at 100% load, 1200 MHz (stock)
+//   Stage 2: 2 worker threads at 100% load, 1600 MHz (via Onion's cpuclock tool)
+//   R_int = (V_idle - V_load) / (I_load - I_idle)
+// Original CPU clock, governor and brightness are always restored (finish, abort,
+// [B], MENU, SIGTERM, atexit).
+// ---------------------------------------------------------------------------
+#define BT_CPUCLOCK_BIN   "/mnt/SDCARD/.tmp_update/bin/cpuclock"
+#define BT_GOVERNOR_FILE  "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor"
+#define BT_STAGES         3
+#define BT_STAGE_MS       15000 // per stage
+#define BT_SETTLE_MS      7000  // samples before this are ignored (voltage relaxation)
+#define BT_SAMPLE_MS      250
+#define BT_START_MIN_MV   3600
+#define BT_ABORT_MV       3500
+#define BT_MIN_DELTA_MA   100
+#define BT_DIM_RAW        3     // Onion brightness level 0
+#define BT_LOAD_THREADS   2
+
+enum { BT_OFF = 0, BT_RUNNING, BT_DONE, BT_ABORTED };
+
+typedef struct {
+    int mhz;      // 0 = leave clock as is (idle)
+    long v_sum;
+    long i_sum;
+    int n;
+    int v_mv;     // averaged battery voltage
+    int i_ma;     // averaged discharge current (positive)
+} bt_stage_t;
+
+static struct {
+    int state;
+    int stage;
+    Uint32 stage_start;
+    Uint32 next_sample;
+    bt_stage_t st[BT_STAGES];
+    int r_mohm[BT_STAGES]; // per load stage vs idle, -1 if not measurable
+    int live_v, live_i;
+    int saved_mhz;
+    char saved_gov[32];
+    bool clock_changed;
+    uint32_t saved_brightness;
+    bool brightness_changed;
+    char msg[64];
+} bt = {0};
+
+static volatile int bt_load_run = 0;
+static volatile uint32_t bt_load_sink = 0;
+static pthread_t bt_threads[BT_LOAD_THREADS];
+static int bt_thread_count = 0;
+
+static void *bt_load_worker(void *arg)
+{
+    uint32_t a = (uint32_t)(uintptr_t)arg + 1, b = 0x9E3779B9u, c = 7;
+    float f = 1.0001f, g = 0.9999f;
+    while (bt_load_run) {
+        for (int k = 0; k < 20000; k++) {
+            a = a * 1664525u + 1013904223u;
+            b ^= (a >> 3) | (b << 5);
+            c += a * b;
+            f = f * 1.0000001f + g;
+            g = g * 0.9999999f + 0.0001f;
+            if (f > 1.0e6f)
+                f = 1.0001f;
+        }
+        bt_load_sink = a ^ b ^ c ^ (uint32_t)f;
+    }
+    return NULL;
+}
+
+static void bt_stop_load(void)
+{
+    bt_load_run = 0;
+    for (int i = 0; i < bt_thread_count; i++)
+        pthread_join(bt_threads[i], NULL);
+    bt_thread_count = 0;
+}
+
+static bool bt_start_load(void)
+{
+    if (bt_thread_count > 0)
+        return true;
+    bt_load_run = 1;
+    for (int i = 0; i < BT_LOAD_THREADS; i++) {
+        if (pthread_create(&bt_threads[i], NULL, bt_load_worker, (void *)(uintptr_t)i) != 0) {
+            bt_stop_load();
+            return false;
+        }
+        bt_thread_count++;
+    }
+    return true;
+}
+
+static const char *bt_cpuclock_cmd(void)
+{
+    return access(BT_CPUCLOCK_BIN, X_OK) == 0 ? BT_CPUCLOCK_BIN : "cpuclock";
+}
+
+static int bt_get_mhz(void)
+{
+    char cmd[96], buf[32];
+    snprintf(cmd, sizeof(cmd), "%s 2>/dev/null", bt_cpuclock_cmd());
+    FILE *p = popen(cmd, "r");
+    if (p == NULL)
+        return -1;
+    int mhz = -1;
+    if (fgets(buf, sizeof(buf), p) != NULL)
+        mhz = atoi(buf);
+    pclose(p);
+    return (mhz >= 100 && mhz <= 2400) ? mhz : -1;
+}
+
+static bool bt_set_mhz(int mhz)
+{
+    char cmd[96];
+    snprintf(cmd, sizeof(cmd), "%s %d >/dev/null 2>&1", bt_cpuclock_cmd(), mhz);
+    return system(cmd) == 0;
+}
+
+static void bt_restore(void)
+{
+    bt_stop_load();
+    if (bt.clock_changed) {
+        if (bt.saved_mhz > 0)
+            bt_set_mhz(bt.saved_mhz);
+        if (bt.saved_gov[0] != '\0') {
+            FILE *fp = fopen(BT_GOVERNOR_FILE, "w");
+            if (fp != NULL) {
+                fputs(bt.saved_gov, fp);
+                fclose(fp);
+            }
+        }
+        bt.clock_changed = false;
+    }
+    if (bt.brightness_changed) {
+        display_setBrightnessRaw(bt.saved_brightness);
+        bt.brightness_changed = false;
+    }
+}
+
+static void bt_abort(const char *reason)
+{
+    bt_restore();
+    snprintf(bt.msg, sizeof(bt.msg), "%s", reason);
+    bt.state = BT_ABORTED;
+}
+
+static const char *bt_rating(int r_mohm)
+{
+    if (r_mohm < 0)
+        return "N/A";
+    if (r_mohm < 160)
+        return "EXCELLENT";
+    if (r_mohm < 260)
+        return "GOOD";
+    if (r_mohm < 380)
+        return "AGED";
+    return "POOR / REPLACE";
+}
+
+// Best result: the 1600 MHz stage (largest current step), else 1200 MHz
+static int bt_final_r(void)
+{
+    return bt.r_mohm[2] >= 0 ? bt.r_mohm[2] : bt.r_mohm[1];
+}
+
+static void bt_enter_stage(int stage, Uint32 now)
+{
+    bt.stage = stage;
+    bt.stage_start = now;
+    bt.next_sample = now;
+    bt.st[stage].v_sum = bt.st[stage].i_sum = 0;
+    bt.st[stage].n = 0;
+
+    if (bt.st[stage].mhz > 0) {
+        bt.clock_changed = true;
+        if (!bt_set_mhz(bt.st[stage].mhz)) {
+            bt_abort("cpuclock failed to set CPU clock");
+            return;
+        }
+        if (!bt_start_load())
+            bt_abort("Failed to start load threads");
+    }
+}
+
+static void bt_start(Uint32 now)
+{
+    memset(&bt, 0, sizeof(bt));
+    bt.st[0].mhz = 0;
+    bt.st[1].mhz = 1200;
+    bt.st[2].mhz = 1600;
+    for (int i = 0; i < BT_STAGES; i++)
+        bt.r_mohm[i] = -1;
+    bt.state = BT_RUNNING;
+
+    if (!axp_poll_data()) {
+        bt_abort("AXP221 not available");
+        return;
+    }
+    if (axp_status.is_charging) {
+        bt_abort("Unplug the charger first");
+        return;
+    }
+    if (axp_status.voltage_mv < BT_START_MIN_MV) {
+        snprintf(bt.msg, sizeof(bt.msg), "Battery too low (%.2f V < %.2f V)",
+                 axp_status.voltage_mv / 1000.0, BT_START_MIN_MV / 1000.0);
+        bt.state = BT_ABORTED;
+        return;
+    }
+    bt.saved_mhz = bt_get_mhz();
+    if (bt.saved_mhz < 0) {
+        bt_abort("Onion cpuclock tool not found");
+        return;
+    }
+    FILE *fp = fopen(BT_GOVERNOR_FILE, "r");
+    if (fp != NULL) {
+        if (fscanf(fp, "%31s", bt.saved_gov) != 1)
+            bt.saved_gov[0] = '\0';
+        fclose(fp);
+    }
+
+    bt.saved_brightness = display_getBrightnessRaw();
+    if (bt.saved_brightness > BT_DIM_RAW) {
+        bt.brightness_changed = true;
+        display_setBrightnessRaw(BT_DIM_RAW);
+    }
+
+    bt_enter_stage(0, now);
+}
+
+static void bt_finish(void)
+{
+    bt_restore();
+    for (int k = 1; k < BT_STAGES; k++) {
+        int d_i = bt.st[k].i_ma - bt.st[0].i_ma;
+        int d_v = bt.st[0].v_mv - bt.st[k].v_mv;
+        bt.r_mohm[k] = (d_i >= BT_MIN_DELTA_MA) ? (int)((long)d_v * 1000 / d_i) : -1;
+        if (bt.r_mohm[k] < 0 && d_i >= BT_MIN_DELTA_MA)
+            bt.r_mohm[k] = 0; // voltage rose under load: noise, clamp
+    }
+    bt.state = BT_DONE;
+    if (bt_final_r() < 0)
+        snprintf(bt.msg, sizeof(bt.msg), "Load step too small to measure (< %d mA)", BT_MIN_DELTA_MA);
+}
+
+// Returns true when the screen needs a redraw
+static bool bt_tick(Uint32 now)
+{
+    if (bt.state != BT_RUNNING || (Sint32)(now - bt.next_sample) < 0)
+        return false;
+    bt.next_sample = now + BT_SAMPLE_MS;
+
+    if (!axp_poll_data()) {
+        bt_abort("I2C read failed");
+        return true;
+    }
+    bt.live_v = axp_status.voltage_mv;
+    bt.live_i = -axp_status.current_ma; // discharge as positive
+    if (axp_status.is_charging) {
+        bt_abort("Charger connected during test");
+        return true;
+    }
+    if (bt.live_v > 0 && bt.live_v < BT_ABORT_MV) {
+        bt_abort("Voltage dropped below 3.50 V");
+        return true;
+    }
+
+    bt_stage_t *s = &bt.st[bt.stage];
+    Uint32 elapsed = now - bt.stage_start;
+    if (elapsed >= BT_SETTLE_MS) {
+        s->v_sum += bt.live_v;
+        s->i_sum += bt.live_i;
+        s->n++;
+    }
+    if (elapsed >= BT_STAGE_MS) {
+        if (s->n > 0) {
+            s->v_mv = (int)(s->v_sum / s->n);
+            s->i_ma = (int)(s->i_sum / s->n);
+        }
+        if (bt.stage + 1 < BT_STAGES)
+            bt_enter_stage(bt.stage + 1, now);
+        else
+            bt_finish();
+    }
+    return true;
+}
+
 static void drawRectFill(int x, int y, int w, int h, Uint32 color)
 {
     SDL_Rect r = {x, y, w, h};
@@ -1441,11 +1731,11 @@ static void renderAxpMenu(void)
         drawRectFill(ib_x, ib_y, ib_w, ib_h, ib_bg);
         drawFrame1px(ib_x, ib_y, ib_w, ib_h, ib_border);
 
-        renderText("NOTICE FOR PLAYERS:", font_small ? font_small : font_Arkhip, col_warn, &(SDL_Rect){ib_x + 16, ib_y + 12, ib_w - 32, 18});
-        renderText("1. Wi-Fi will be turned off and the screen will dim temporarily.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 34, ib_w - 32, 18});
-        renderText("   This eliminates power noise to accurately measure cell health.", font_small ? font_small : font_Arkhip, col_sub, &(SDL_Rect){ib_x + 16, ib_y + 54, ib_w - 32, 18});
-        renderText("2. The CPU will run at max load (up to 1600 MHz) to detect sag.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 76, ib_w - 32, 18});
-        renderText("3. Original brightness & Wi-Fi will be restored afterwards.", font_small ? font_small : font_Arkhip, col_green, &(SDL_Rect){ib_x + 16, ib_y + 102, ib_w - 32, 18});
+        renderText("NOTICE (about 45 s, battery only, >= 3.60 V):", font_small ? font_small : font_Arkhip, col_warn, &(SDL_Rect){ib_x + 16, ib_y + 12, ib_w - 32, 18});
+        renderText("1. Screen dims; 15 s idle baseline is measured.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 34, ib_w - 32, 18});
+        renderText("2. Both CPU cores at 100% load: 1200 MHz, then 1600 MHz.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 54, ib_w - 32, 18});
+        renderText("3. Internal resistance = voltage sag / current step.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 76, ib_w - 32, 18});
+        renderText("Clock & brightness restored. Turn Wi-Fi off for accuracy.", font_small ? font_small : font_Arkhip, col_green, &(SDL_Rect){ib_x + 16, ib_y + 102, ib_w - 32, 18});
 
         // Two Action Buttons at Modal bottom
         int btn_w = 210, btn_h = 38, btn_y = my + 232;
@@ -1464,6 +1754,87 @@ static void renderAxpMenu(void)
         drawRectFill(b2_x, btn_y, btn_w, btn_h, b2_bg);
         drawFrame2px(b2_x, btn_y, btn_w, btn_h, b2_border);
         drawCenteredText("[B] Cancel", font_Arkhip, col_val, b2_x, btn_y + 8, btn_w);
+    }
+
+    // Battery health test progress / results
+    if (bt.state != BT_OFF) {
+        TTF_Font *fs = font_small ? font_small : font_Arkhip;
+        dimScreen(190);
+        int mw = 540, mh = 330, mx = 50, my = 75;
+        Uint32 m_border = bt.state == BT_ABORTED ? SDL_MapRGB(screen->format, 224, 108, 117) : SDL_MapRGB(screen->format, 220, 140, 50);
+        drawRectFill(mx, my, mw, mh, SDL_MapRGB(screen->format, 12, 20, 32));
+        drawFrame2px(mx, my, mw, mh, m_border);
+        drawCenteredText("BATTERY HEALTH TEST", font_title ? font_title : font_Arkhip, col_val, mx, my + 14, mw);
+
+        static const char *stage_names[BT_STAGES] = {"Idle baseline", "Load 2 cores @ 1200 MHz", "Load 2 cores @ 1600 MHz"};
+        char line[96];
+
+        if (bt.state == BT_RUNNING) {
+            Uint32 el = SDL_GetTicks() - bt.stage_start;
+            if (el > BT_STAGE_MS)
+                el = BT_STAGE_MS;
+            snprintf(line, sizeof(line), "Stage %d/%d: %s", bt.stage + 1, BT_STAGES, stage_names[bt.stage]);
+            drawCenteredText(line, fs, col_warn, mx, my + 42, mw);
+
+            // overall progress bar
+            int pb_x = mx + 30, pb_y = my + 66, pb_w = mw - 60, pb_h = 12;
+            long total = (long)BT_STAGES * BT_STAGE_MS;
+            long done = (long)bt.stage * BT_STAGE_MS + el;
+            drawRectFill(pb_x, pb_y, pb_w, pb_h, SDL_MapRGB(screen->format, 30, 40, 58));
+            drawRectFill(pb_x, pb_y, (int)(pb_w * done / total), pb_h, SDL_MapRGB(screen->format, 100, 215, 255));
+
+            snprintf(line, sizeof(line), "Live: %.3f V   %d mA", bt.live_v / 1000.0, bt.live_i);
+            drawCenteredText(line, font_Arkhip, col_val, mx, my + 86, mw);
+        }
+        else if (bt.state == BT_ABORTED) {
+            drawCenteredText("TEST ABORTED", font_Arkhip, (SDL_Color){224, 108, 117}, mx, my + 46, mw);
+            drawCenteredText(bt.msg, fs, col_val, mx, my + 72, mw);
+            drawCenteredText("CPU clock and brightness restored.", fs, col_sub, mx, my + 92, mw);
+        }
+        else {
+            int r = bt_final_r();
+            if (r >= 0) {
+                snprintf(line, sizeof(line), "Internal resistance: %d mOhm  -  %s", r, bt_rating(r));
+                drawCenteredText(line, font_Arkhip, r < 260 ? col_green : col_warn, mx, my + 50, mw);
+            }
+            else
+                drawCenteredText(bt.msg, fs, col_warn, mx, my + 50, mw);
+            drawCenteredText("<160 excellent, <260 good, <380 aged, else replace", fs, col_sub, mx, my + 76, mw);
+        }
+
+        // per-stage table
+        int tx = mx + 30, ty = my + 116, tw = mw - 60;
+        drawRectFill(tx, ty, tw, 128, SDL_MapRGB(screen->format, 18, 28, 44));
+        drawFrame1px(tx, ty, tw, 128, SDL_MapRGB(screen->format, 40, 60, 90));
+        renderText("Stage", fs, col_lbl, &(SDL_Rect){tx + 12, ty + 8, 200, 18});
+        renderTextAlignRight("Voltage", fs, col_lbl, &(SDL_Rect){tx + 300, ty + 8, 80, 18});
+        renderTextAlignRight("Current", fs, col_lbl, &(SDL_Rect){tx + 390, ty + 8, 80, 18});
+        renderTextAlignRight("R_int", fs, col_lbl, &(SDL_Rect){tx + tw - 12, ty + 8, 70, 18});
+        for (int k = 0; k < BT_STAGES; k++) {
+            int ry = ty + 36 + k * 30;
+            bool measured = (k < bt.stage) || bt.state == BT_DONE || (bt.state == BT_ABORTED && k < bt.stage);
+            measured = measured && bt.st[k].n > 0;
+            SDL_Color c = (bt.state == BT_RUNNING && k == bt.stage) ? col_cyan : (measured ? col_val : col_sub);
+            renderText(stage_names[k], fs, c, &(SDL_Rect){tx + 12, ry, 220, 18});
+            if (measured) {
+                snprintf(line, sizeof(line), "%.3f V", bt.st[k].v_mv / 1000.0);
+                renderTextAlignRight(line, fs, c, &(SDL_Rect){tx + 300, ry, 80, 18});
+                snprintf(line, sizeof(line), "%d mA", bt.st[k].i_ma);
+                renderTextAlignRight(line, fs, c, &(SDL_Rect){tx + 390, ry, 80, 18});
+                if (k > 0 && bt.state == BT_DONE) {
+                    if (bt.r_mohm[k] >= 0)
+                        snprintf(line, sizeof(line), "%d mOhm", bt.r_mohm[k]);
+                    else
+                        snprintf(line, sizeof(line), "-");
+                    renderTextAlignRight(line, fs, c, &(SDL_Rect){tx + tw - 12, ry, 70, 18});
+                }
+            }
+            else
+                renderTextAlignRight("...", fs, c, &(SDL_Rect){tx + 390, ry, 80, 18});
+        }
+
+        const char *hint = bt.state == BT_RUNNING ? "[B] Cancel test" : "[A / B] Close";
+        drawBadgePill(hint, fs, col_val, col_pill_bg, col_pill_border, mx + (mw - 200) / 2, my + mh - 46, 200, 30);
     }
 }
 
@@ -1704,6 +2075,7 @@ int main(int argc, char *argv[])
 {
     init();
     signal(SIGCONT, sigcont_handler);
+    atexit(bt_restore);
     KeyState keystate[320] = {(KeyState)0};
     render_waiting_screen();
 
@@ -1738,6 +2110,8 @@ int main(int argc, char *argv[])
         // between passes or SIGCONT means we were stopped: query AXP221 immediately and recompute.
         if (sigcont_received || (Sint32)(now - last_pass) > WAKE_GAP_MS) {
             sigcont_received = 0;
+            if (bt.state == BT_RUNNING)
+                bt_abort("Interrupted by sleep");
             axp_poll_data();
             reset_graph();
             compute_graph();
@@ -1775,7 +2149,12 @@ int main(int argc, char *argv[])
             changed = true;
         }
 
-        if (show_axp_menu && (Sint32)(now - axp_last_poll) >= 1000) {
+        if (bt.state == BT_RUNNING) {
+            if (bt_tick(now))
+                changed = true;
+            axp_last_poll = now; // the test polls the PMIC itself
+        }
+        else if (show_axp_menu && (Sint32)(now - axp_last_poll) >= 1000) {
             axp_last_poll = now;
             if (axp_poll_data())
                 changed = true;
@@ -1787,7 +2166,20 @@ int main(int argc, char *argv[])
 
         if (updateKeystate(keystate, &quit, true, NULL)) {
             last_input = now;
-            if (show_axp_menu) {
+            if (show_axp_menu && bt.state != BT_OFF) {
+                // Battery test screen swallows all input except cancel / close
+                if (bt.state == BT_RUNNING) {
+                    if (keystate[SW_BTN_B] == PRESSED) {
+                        bt_abort("Cancelled by user");
+                        changed = true;
+                    }
+                }
+                else if (keystate[SW_BTN_A] == PRESSED || keystate[SW_BTN_B] == PRESSED) {
+                    bt.state = BT_OFF;
+                    changed = true;
+                }
+            }
+            else if (show_axp_menu) {
                 if (axp_confirm_calib) {
                     if (keystate[SW_BTN_B] == PRESSED) {
                         axp_confirm_calib = false;
@@ -1825,8 +2217,7 @@ int main(int argc, char *argv[])
                     }
                     else if (keystate[SW_BTN_A] == PRESSED) {
                         axp_confirm_btest = false;
-                        snprintf(axp_feedback_msg, sizeof(axp_feedback_msg), "Battery test starting...");
-                        axp_feedback_until = now + 3000;
+                        bt_start(now);
                         changed = true;
                     }
                 }
@@ -2014,6 +2405,7 @@ int main(int argc, char *argv[])
 
         renderPage();
     }
+    bt_restore(); // MENU / SIGTERM during a test: put clock & brightness back
     free_resources();
     return EXIT_SUCCESS;
 }

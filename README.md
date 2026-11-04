@@ -52,6 +52,7 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
   * **Battery Capacity (`< 2600 mAh >`):** Changeable with `[D-Pad LEFT/RIGHT]`, saved to hardware registers with `[A]`.
   * **Sync Counter to 100%:** Instant recalibration to design capacity upon full charge.
   * **Shutdown Voltage (`< 2.9 V >`):** PMIC auto power-off threshold `Voff` (REG 31H, 2.6–3.1 V in 0.1 V steps, default 2.9 V). Changeable with `[D-Pad LEFT/RIGHT]`, saved with `[A]`. This is a **hard power cut** done by the PMIC — the game is not saved, so keep Onion's own low-battery save/shutdown above it.
+  * **Battery Health Test (~45 s):** Measures internal resistance from voltage sag: idle baseline (screen dimmed), then both CPU cores at 100% load at 1200 MHz and 1600 MHz. Rates the cell EXCELLENT / GOOD / AGED / POOR. Requires ≥ 3.60 V on battery (no charger); aborts below 3.50 V or with `[B]`; CPU clock, governor and brightness are always restored. Turn Wi-Fi off first for the cleanest reading.
   * **Capacity Learning Toggle:** Enable or disable the AXP221 capacity correction function with a confirmation modal (verified by register read-back).
 * **Ultra-Low CPU Usage:**
   * Consumes **<0.1% CPU** when idle (sleeps 50 ms in kernel).
