@@ -3,6 +3,9 @@
 
 #include "../batmon/batmonDB.h"
 #include <pthread.h>
+#include <sched.h>
+
+extern int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const cpu_set_t *cpuset);
 #define _LARGEFILE64_SOURCE 1
 #include <sys/stat.h>
 
@@ -1206,7 +1209,13 @@ static int bt_thread_count = 0;
 
 static void *bt_load_worker(void *arg)
 {
-    uint32_t a = (uint32_t)(uintptr_t)arg + 1, b = 0x9E3779B9u, c = 7;
+    int core_id = (int)(uintptr_t)arg;
+    cpu_set_t cpuset;
+    memset(&cpuset, 0, sizeof(cpuset));
+    ((unsigned long *)&cpuset)[0] = (1UL << (core_id % 2));
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
+    uint32_t a = (uint32_t)core_id + 1, b = 0x9E3779B9u, c = 7;
     float f = 1.0001f, g = 0.9999f;
     while (bt_load_run) {
         for (int k = 0; k < 20000; k++) {
