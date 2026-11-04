@@ -1327,6 +1327,14 @@ static void bt_enter_stage(int stage, Uint32 now)
     bt.st[stage].v_sum = bt.st[stage].i_sum = 0;
     bt.st[stage].n = 0;
 
+    if (stage == 0) {
+        // Stage 0: Idle baseline with screen dimmed
+        display_setBrightnessRaw(BT_DIM_RAW);
+    } else {
+        // Stage 1 & 2: Load 2 cores with screen at 100% brightness
+        display_setBrightness(10);
+    }
+
     if (bt.st[stage].mhz > 0) {
         bt.clock_changed = true;
         if (!bt_set_mhz(bt.st[stage].mhz)) {
@@ -1375,10 +1383,8 @@ static void bt_start(Uint32 now)
     }
 
     bt.saved_brightness = display_getBrightnessRaw();
-    if (bt.saved_brightness > BT_DIM_RAW) {
-        bt.brightness_changed = true;
-        display_setBrightnessRaw(BT_DIM_RAW);
-    }
+    bt.brightness_changed = true;
+    display_setBrightnessRaw(BT_DIM_RAW);
 
     bt_enter_stage(0, now);
 }
@@ -1796,7 +1802,10 @@ static void renderAxpMenu(void)
             drawRectFill(pb_x, pb_y, pb_w, pb_h, SDL_MapRGB(screen->format, 30, 40, 58));
             drawRectFill(pb_x, pb_y, (int)(pb_w * done / total), pb_h, SDL_MapRGB(screen->format, 100, 215, 255));
 
-            snprintf(line, sizeof(line), "Live: %.3f V   %d mA", bt.live_v / 1000.0, bt.live_i);
+            if (bt.stage > 0)
+                snprintf(line, sizeof(line), "Live: %.3f V   %d mA  [2x CPU 100%%  BL 100%%]", bt.live_v / 1000.0, bt.live_i);
+            else
+                snprintf(line, sizeof(line), "Live: %.3f V   %d mA  [IDLE  BL 0%%]", bt.live_v / 1000.0, bt.live_i);
             drawCenteredText(line, font_Arkhip, col_val, mx, my + 86, mw);
         }
         else if (bt.state == BT_ABORTED) {
