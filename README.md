@@ -64,6 +64,7 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
 * **Zoom Levels:** Use **`[L2]` / `[R2]`** to switch between 1-hour, 2-hour, and 4-hour grid zoom profiles.
 * **Accurate Drain Predictions:** The `LEFT` metric projects remaining runtime by scaling your historical discharge curve against your current gaming session's load.
 * **Sleep Drain Tracking:** Accurately logs duration and percentage lost during sleep mode (e.g. `+3h10 SLEEP -12% (3.8%/H)`).
+* **Session Stats (`AVG` / `MIN` / `BEST`):** Computed from **finished** sessions only, i.e. sessions that end with the charger being plugged in. A running session, even one longer than the record, appears in `BEST` only after you plug in the charger. Durations come from Onion's `batmon` log, which is written when the percentage changes or at least every 10 minutes. If the console dies by a hard power cut, the session's last few minutes may be missing.
 
 ---
 
@@ -132,6 +133,26 @@ Disabling learning (`[ A: Disable capacity learning ]`) keeps the learned capaci
 
 ---
 
+## ⚠️ Low Battery, Shutdown Voltage & Hard Power-Off
+
+There are two independent ways the console shuts down on low battery:
+
+| | Onion low-battery shutdown | PMIC `Voff` cut-off |
+|:---|:---|:---|
+| Trigger | Battery percentage (Onion setting) | Voltage under load falls below `Voff` (default 2.9 V) |
+| Saves game / state | Yes | **No.** All outputs are cut immediately, with no documented delay |
+| SD card | Clean | A write in progress (savestate, `batmon.db`) can be interrupted |
+| Session log | Complete | Last minutes may be missing |
+
+- **Is a deep discharge harmful?** No. 3.0–3.2 V under load is a normal end of discharge for Li-ion, and the PMIC cuts power before the cell gets dangerously low.
+- **Raising `Voff` to 3.0–3.1 V** leaves a little more reserve in the cell. The threshold is compared under load, though: a load spike in a demanding game can then cut power while the resting voltage is still ~3.2 V.
+- **Recommended:** keep Onion's low-battery shutdown enabled for everyday play. For a capacity-learning or endurance run without it, save often and plug in the charger at ~3.0 V. Plugging in also ends the session cleanly, so `BEST` gets the full duration.
+- `Voff` is a PMIC register. It is kept while the battery stays connected, but it is not yet confirmed whether it survives a reboot. Check the menu after restarting.
+
+Register-level details, datasheet sources and observed behaviour are in **[docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md)**.
+
+---
+
 ## 🔍 Hardware Compatibility
 
 | Model | Chipset | Supported Features |
@@ -158,7 +179,9 @@ Key build flags & configuration:
 - Glibc compatibility wrapper (`stat64` wrapped to `__xstat64@GLIBC_2.4`).
 - Stripped binary size: ~50 KB.
 
-For full technical details, version history, and architecture roadmap, see **[CHANGELOG.md](CHANGELOG.md)**.
+**GitHub Actions:** every push builds the app on Ubuntu with the ARM GNU Toolchain 13.3.rel1 for Linux (cached) and uploads the `BatteryMonitorUI` folder as a build artifact (Actions tab → run → Artifacts). Pushing a `v*` tag (e.g. `v2.0.1`) also publishes a GitHub Release with `BatteryMonitorUI_<tag>_OnionOS.zip`. Locally, `build.sh` takes the toolchain from `$TOOLCHAIN`, falling back to a Windows (mingw) toolchain path.
+
+For full technical details, version history, and architecture roadmap, see **[CHANGELOG.md](CHANGELOG.md)**. PMIC register notes: **[docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md)**.
 
 ---
 

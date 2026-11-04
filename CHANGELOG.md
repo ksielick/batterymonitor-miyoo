@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Design Capacity` renamed to `Total Capacity` (REG E0H/E1H holds the value learned by the PMIC, not only the design value).
 - `Battery Level` shows an `(est.)` suffix when REG B9H bit 7 reports the percentage is not yet correctly calculated.
 - Calibration guide: documented the 2.9 V PMIC cut-off (REG 31H default `Voff`) and fixed the step count; fixed the Releases link.
+- **Documentation:** new [docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md) with translated datasheet register notes (B8H, B9H, E0H-E6H, 31H, ADC) and observed behaviour. README now explains that `BEST` counts only finished sessions, compares Onion low-battery shutdown with the PMIC `Voff` hard cut-off, and documents the GitHub Actions build.
+- **GitHub Actions build:** every push builds on Ubuntu with the ARM GNU 13.3.rel1 Linux toolchain and uploads an artifact; `v*` tags publish a release ZIP. `package.sh` now also works on Linux.
 
 ---
 
