@@ -43,15 +43,16 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
   * **Power Draw / Charge:** Instantaneous mA draw (e.g. `-385 mA` discharging, `+1200 mA` fast charging).
   * **Battery Level:** Current system battery percentage.
   * **Energy Remaining:** True energy remaining in the cell in **milliampere-hours (mAh)**.
-  * **Design Capacity:** Registered battery capacity setting.
+  * **Total Capacity:** Battery total capacity register (set manually or learned by the PMIC).
 * **Dual Fuel Gauge Readings:**
   * **Voltage (OCV):** Quick voltage-based reading. Sensitive to instantaneous game load.
   * **Coulomb Ctr (CC):** Integrated energy flow tracking. Highly accurate and immune to momentary load dips.
-  * **Fuel Gauge & Calibration Status:** Real-time feedback on PMIC state (`Active`, `Learning`, `Calibrated`).
+  * **Fuel Gauge & Calibration Status:** Real-time feedback on PMIC state (`Active`, capacity learning `Enabled`/`Off`, correction `In progress`/`Idle`).
 * **Hardware Controls:**
   * **Battery Capacity (`< 2600 mAh >`):** Changeable with `[D-Pad LEFT/RIGHT]`, saved to hardware registers with `[A]`.
   * **Sync Counter to 100%:** Instant recalibration to design capacity upon full charge.
-  * **Calibration Cycle Toggle:** Start or stop the AXP221 hardware capacity learning cycle with a step-by-step confirmation modal.
+  * **Shutdown Voltage (`< 2.9 V >`):** PMIC auto power-off threshold `Voff` (REG 31H, 2.6–3.1 V in 0.1 V steps, default 2.9 V). Changeable with `[D-Pad LEFT/RIGHT]`, saved with `[A]`. This is a **hard power cut** done by the PMIC — the game is not saved, so keep Onion's own low-battery save/shutdown above it.
+  * **Capacity Learning Toggle:** Enable or disable the AXP221 capacity correction function with a confirmation modal (verified by register read-back).
 * **Ultra-Low CPU Usage:**
   * Consumes **<0.1% CPU** when idle (sleeps 50 ms in kernel).
   * Zero I2C overhead during normal gaming; only polls when the menu is active.
@@ -70,9 +71,9 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
 | Button | Screen | Action |
 |:---|:---|:---|
 | **`[SELECT]`** | Graph Screen | Open / Close Live Hardware Telemetry & Calibration Menu |
-| **`[D-Pad UP / DOWN]`** | Telemetry Menu | Select action (Capacity / Sync 100% / Calibrate) |
-| **`[D-Pad LEFT / RIGHT]`** | Telemetry Menu | Adjust design capacity in 50 mAh increments |
-| **`[A]`** | Telemetry Menu | Save capacity setting / Sync counter to 100% / Confirm calibration |
+| **`[D-Pad UP / DOWN]`** | Telemetry Menu | Select action (Capacity / Shutdown Voltage / Sync 100% / Capacity Learning / Battery Test) |
+| **`[D-Pad LEFT / RIGHT]`** | Telemetry Menu | Adjust capacity in 50 mAh increments / shutdown voltage in 0.1 V steps |
+| **`[A]`** | Telemetry Menu | Save capacity or shutdown voltage / Sync counter to 100% / Confirm capacity learning |
 | **`[B]`** | Telemetry Menu | Back to Graph Screen / Cancel modal dialog |
 | **`[L1] / [R1]`** | Graph Screen | Step backward / forward through play sessions and charges |
 | **`[L2] / [R2]`** | Graph Screen | Zoom in / out (1h, 2h, 4h per division) |
@@ -84,7 +85,7 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
 ## 📦 Installation (Drop-in Replacement)
 
 ### Method A: Via MicroSD Card (Recommended)
-1. Download **`BatteryMonitorUI_v2.0_OnionOS.zip`** from the [Releases](releases) page.
+1. Download **`BatteryMonitorUI_v2.0_OnionOS.zip`** from the [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases) page.
 2. Power off your console and insert the MicroSD card into your computer.
 3. *(Optional but recommended)* Rename or back up your existing `App/BatteryMonitorUI` folder on the SD card (e.g. to `BatteryMonitorUI.bak`).
 4. Extract the `BatteryMonitorUI` folder from the ZIP directly into the **`App/`** directory on your SD card:
@@ -107,16 +108,26 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
 
 ---
 
-## 🔧 How to Calibrate Your Battery (3-Step Guide)
+## 🔧 How to Calibrate Your Battery (4-Step Guide)
 
-If your battery percentage drops abruptly under load or stays at 10% for hours, perform a hardware calibration cycle:
+If your battery percentage drops abruptly under load or stays at 10% for hours, let the AXP221 learn your battery's real capacity:
 
 1. **Charge to 100%:** Plug in the charger and charge until the battery reaches 100% and current draw drops to near 0 mA (or the charging LED turns off).
-2. **Engage Calibration:** Open **Battery Monitor**, press **`[SELECT]`**, scroll down to `[ A: Calibrate battery ]`, press **`[A]`**, and confirm. The *Calibration Mode* will now read **Learning**.
-3. **Discharge Fully:** Unplug the charger and play normally until the console powers off by itself due to low battery (do not connect the charger during this time).
+2. **Enable Capacity Learning:** Open **Battery Monitor**, press **`[SELECT]`**, scroll down to `[ A: Enable capacity learning ]`, press **`[A]`**, and confirm. *Cap. Learning* will now read **Enabled**.
+3. **Discharge Deeply:** Unplug the charger and play normally until the console powers off. This is safe: the PMIC itself cuts power at the **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**; can be raised to 3.1 V in the menu).
 4. **Recharge to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous charge.
 
-Once complete, the AXP221 PMIC will update its internal learned capacity register. Your percentage indicator will now accurately reflect your battery's true capacity!
+Once complete, the PMIC writes the learned value into the battery total capacity register (`0xE0/0xE1`), visible as **Total Capacity** (e.g. `3167 mAh` on a stock 3000 mAh cell).
+
+### What the status fields mean (AXP221 datasheet v1.2, REG B8H)
+
+| Field | Register bit | Meaning |
+|:---|:---|:---|
+| **Cap. Learning: Enabled / Off** | B8H bit 5 (RW) | Capacity correction function switch. It is a **persistent setting**, not a one-shot cycle — it stays *Enabled* after a successful cycle and keeps refining capacity as the cell ages. Leaving it enabled is safe and recommended. |
+| **Correction: In progress / Idle** | B8H bit 4 | Whether the PMIC is correcting capacity right now. *Idle* after a full charge is normal. |
+| **Battery Level `(est.)` suffix** | B9H bit 7 | Shown when the PMIC reports the percentage is not yet correctly calculated. |
+
+Disabling learning (`[ A: Disable capacity learning ]`) keeps the learned capacity and the Coulomb counter running. The app reads the register back after every change and reports if the PMIC rejected it.
 
 ---
 

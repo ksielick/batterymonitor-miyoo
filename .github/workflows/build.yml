@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish releases on tag push
+
+env:
+  TC_VERSION: 13.3.rel1
+  TC_NAME: arm-gnu-toolchain-13.3.rel1-x86_64-arm-none-linux-gnueabihf
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache ARM GNU toolchain
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchain/${{ env.TC_NAME }}
+          key: ${{ env.TC_NAME }}
+
+      - name: Download ARM GNU toolchain
+        if: steps.cache-tc.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/toolchain
+          curl -fsSL --retry 3 -o /tmp/tc.tar.xz \
+            "https://developer.arm.com/-/media/Files/downloads/gnu/${TC_VERSION}/binrel/${TC_NAME}.tar.xz"
+          tar -xJf /tmp/tc.tar.xz -C ~/toolchain
+          rm /tmp/tc.tar.xz
+
+      - name: Set version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=dev-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        run: |
+          chmod +x build.sh package.sh
+          TOOLCHAIN="$HOME/toolchain/${TC_NAME}/bin" ./build.sh
+
+      - name: Package
+        run: |
+          rm -f dist/*.zip
+          ./package.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatteryMonitorUI_${{ env.VERSION }}_OnionOS
+          path: build/stage/
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/BatteryMonitorUI_${{ env.VERSION }}_OnionOS.zip
+          generate_release_notes: true

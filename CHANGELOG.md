@@ -30,6 +30,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-11-04
+
+### Added
+- **Shutdown Voltage setting (`Voff`, REG 31H bits 2-0):** new `[SELECT]` menu row `Shutdown Voltage: < 2.9 V >`, adjustable 2.6–3.1 V in 0.1 V steps with `[LEFT/RIGHT]`, saved with `[A]` and verified by read-back. The write preserves only bits 7 and 4; self-triggering bits 6 (soft restart), 5 (soft wakeup) and 3 (sleep wakeup) are always written as 0.
+
+### Fixed
+- **Calibration status mislabelled:** REG B8H bit 4 is the *correction in progress* flag (AXP221 datasheet v1.2), not a "calibrated" flag. It was shown as `Calibration: Uncalibrated` even after a successful learning cycle. Now shown as `Correction: In progress / Idle`.
+- **"Calibration never ends" confusion:** REG B8H bit 5 is a persistent capacity-correction switch, not a one-shot cycle. Relabelled from `Calibration Mode: Learning / Idle` to `Cap. Learning: Enabled / Off`; button now reads `Enable / Disable capacity learning`, and the modal explains it is safe to keep enabled.
+- **Silent write failures:** `axp_set_calibration()` now reads REG B8H back after writing and reports `PMIC rejected the change` or `I2C error` instead of always claiming success.
+
+### Changed
+- `Design Capacity` renamed to `Total Capacity` (REG E0H/E1H holds the value learned by the PMIC, not only the design value).
+- `Battery Level` shows an `(est.)` suffix when REG B9H bit 7 reports the percentage is not yet correctly calculated.
+- Calibration guide: documented the 2.9 V PMIC cut-off (REG 31H default `Voff`) and fixed the step count; fixed the Releases link.
+
+---
+
 ## [2.0.0] - 2026-11-03
 
 ### Added
