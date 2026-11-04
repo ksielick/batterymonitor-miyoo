@@ -20,14 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Battery Health Test (`[ A: Battery test ]`):** 3-stage internal resistance measurement, ~45 s total:
   - Stage 1: idle baseline (screen dimmed to Onion level 0, app idle under `ondemand`).
-  - Stage 2: 2 worker pthreads at 100% load on both Cortex-A7 cores at 1200 MHz.
-  - Stage 3: same load at 1600 MHz, switched with Onion's own `cpuclock` tool.
+  - Stage 2: 2 worker pthreads at 100% load hard-pinned to Core 0 and Core 1 (`pthread_setaffinity_np`) at 1200 MHz, with **screen brightness at 100%**.
+  - Stage 3: same load at 1600 MHz (`cpuclock` in `userspace` governor) with **screen brightness at 100%**.
+  - Screen at 100% provides the critical ~180-200 mA current step required for accurate delta I measurement (> 150 mA), while Cortex-A7 CPU cores draw ~36 mA (1200 MHz) and ~63 mA (1600 MHz) under 100% dual-core load.
+  - Measured baseline: **200–202 mΩ** with Wi-Fi off (pure DC, 1% repeatability) and 214–224 mΩ with Wi-Fi on (slight AC ripple from RF TX bursts).
   - Each stage lasts 15 s; only samples after a 7 s settle time (4 Hz) are averaged.
   - $R_{int} = (V_{idle} - V_{load}) / (I_{load} - I_{idle})$, rated **EXCELLENT** (< 160 mΩ), **GOOD** (< 260), **AGED** (< 380), **POOR / REPLACE**.
   - Safeguards: refuses to start below 3.60 V or with the charger connected; aborts below 3.50 V, on charger plug-in, on sleep, or with `[B]`. Original CPU clock, governor and brightness are restored on finish, abort, MENU exit, SIGTERM and `atexit`.
+- **Live `SESSION` duration tracking on stock OnionOS:**
+  - Stock `batmon` logs `start_time = NULL` in SQLite and only flushes every 10 min.
+  - Added automatic fallback deriving T0 from `stat(BATTERY_LOG_FILE).st_mtime - duration`, allowing `SESSION` to update smoothly live every 15 s without modifying system daemons.
 - **Shutdown Voltage setting (`Voff`, REG 31H bits 2-0):** new `[SELECT]` menu row `Shutdown Voltage: < 2.9 V >`, adjustable 2.6–3.1 V in 0.1 V steps with `[LEFT/RIGHT]`, saved with `[A]` and verified by read-back. The write preserves only bits 7 and 4; self-triggering bits 6 (soft restart), 5 (soft wakeup) and 3 (sleep wakeup) are always written as 0.
 
 ### Fixed
+- **Battery Health Test crash on glibc 2.28:** modern toolchain (glibc 2.38) merged `pthread_create` into `libc.so.6`, but Miyoo Mini requires `libpthread.so.0`. Fixed by adding `lib/libpthread.so` and building with `-pthread -Wl,--no-as-needed -lpthread`.
+- **Wrapped `stat` and `stat64`:** wrapped both functions to `__xstat` / `__xstat64@GLIBC_2.4` via `-Wl,--wrap=stat -Wl,--wrap=stat64` to eliminate `GLIBC_2.33` dependencies and guarantee maximum compatibility down to glibc 2.17.
 - **Unrounded manual capacity stepping:** manual capacity adjustment now always snaps to clean 50 mAh multiples (default baseline 3000 mAh for Miyoo Mini Plus). If the PMIC holds an unrounded value from hardware autocalibration (e.g. 3167 mAh), manual capacity adjustment starts at nominal 3000 mAh instead of inheriting the raw unrounded value, and stepping with [LEFT/RIGHT] snaps strictly to round 50 mAh multiples.
 - **Calibration status mislabelled:** REG B8H bit 4 is the *correction in progress* flag (AXP221 datasheet v1.2), not a "calibrated" flag. It was shown as `Calibration: Uncalibrated` even after a successful learning cycle. Now shown as `Correction: In progress / Idle`.
 - **"Calibration never ends" confusion:** REG B8H bit 5 is a persistent capacity-correction switch, not a one-shot cycle. Relabelled from `Calibration Mode: Learning / Idle` to `Cap. Learning: Enabled / Off`; button now reads `Enable / Disable capacity learning`, and the modal explains it is safe to keep enabled.
