@@ -556,6 +556,25 @@ int estimate_left_seconds(const log_row *rows, int n)
     return (int)(below * factor + here);
 }
 
+// Remove OnionOS low-battery shutdown flag (/tmp/.lowBat) when charging or battery level > 3%.
+// OnionOS keymon sets .lowBat upon hitting <= 1%, but fails to clear it when the charger is plugged in.
+static void check_and_clear_lowbat_flag(int battery_pct, bool is_charging)
+{
+    if (battery_pct <= 0) {
+        FILE *fp = fopen("/tmp/percBat", "r");
+        if (fp != NULL) {
+            if (fscanf(fp, "%d", &battery_pct) != 1)
+                battery_pct = 0;
+            fclose(fp);
+        }
+    }
+    if (is_charging || battery_pct > 3) {
+        if (access("/tmp/.lowBat", F_OK) == 0) {
+            unlink("/tmp/.lowBat");
+        }
+    }
+}
+
 // Battery voltage from batmon's last reading. On the Mini Plus that is axp_test's output
 // (millivolts); on the Mini batmon writes the smoothed ADC value there instead, which it
 // turns into volts as (adc - 148) / 100. Returns true when the text changed.
@@ -577,6 +596,8 @@ bool read_battery_voltage(void)
         if (c != NULL)
             charging = atoi(c + 11);
     }
+
+    check_and_clear_lowbat_flag(-1, charging != 0);
 
     if (DEVICE_ID == MIYOO354) {
         if (voltage > 0) {
@@ -858,12 +879,39 @@ void compute_graph(void)
                     m->sleep_drop = run_sleep_drop;
                 }
             }
+
+            // Merge adjacent charge sessions if separated only by a brief charger disconnect (no discharge session between them)
+            for (int i = 0; i < session_mark_count - 1; ) {
+                if (session_marks[i].is_charge && session_marks[i + 1].is_charge) {
+                    session_marks[i].start_level = session_marks[i + 1].start_level;
+                    session_marks[i].start_index = session_marks[i + 1].start_index;
+                    session_marks[i].length += session_marks[i + 1].length;
+                    session_marks[i].start_time = session_marks[i + 1].start_time;
+                    session_marks[i].has_times = session_marks[i].has_times && session_marks[i + 1].has_times;
+                    session_marks[i].sleep += session_marks[i + 1].sleep;
+                    session_marks[i].sleep_drop += session_marks[i + 1].sleep_drop;
+                    for (int k = session_marks[i + 1].start_index; k <= session_marks[i].end_index; k++) {
+                        if (k >= 0 && k < graph_max_size) {
+                            graphic[k].is_charging = true;
+                        }
+                    }
+                    for (int j = i + 1; j < session_mark_count - 1; j++) {
+                        session_marks[j] = session_marks[j + 1];
+                    }
+                    session_mark_count--;
+                } else {
+                    i++;
+                }
+            }
+
             if (session_duration[0] == '\0')
                 secondsToHoursMinutes(total_duration, session_duration);
             sqlite3_finalize(stmt);
             close_battery_log_db();
         }
     }
+    if (selected_session >= session_mark_count)
+        selected_session = session_mark_count - 1;
 }
 
 // graphic[] index units per screen pixel at a zoom (16 h, 8 h, 4 h view)
@@ -1022,6 +1070,8 @@ static bool axp_poll_data(void)
 
     axp_status.ocv_pct = e4 >= 0 ? (e4 & 0x7F) : 0;
     axp_status.cc_pct = e5 >= 0 ? (e5 & 0x7F) : 0;
+
+    check_and_clear_lowbat_flag(axp_status.battery_pct, axp_status.is_charging);
 
     return true;
 }
@@ -2114,6 +2164,7 @@ int main(int argc, char *argv[])
     getDeviceSerial();
     compute_graph();
     read_battery_voltage();
+    check_and_clear_lowbat_flag(-1, false);
     renderPage();
 
     bool changed;
@@ -2178,6 +2229,13 @@ int main(int argc, char *argv[])
             reset_graph();
             compute_graph();
             changed = true;
+        }
+
+        // Proactively clear Onion's false low-battery shutdown flag (/tmp/.lowBat) every 1s
+        static Uint32 last_lowbat_tick = 0;
+        if ((Sint32)(now - last_lowbat_tick) >= 1000) {
+            last_lowbat_tick = now;
+            check_and_clear_lowbat_flag(-1, false);
         }
 
         if (bt.state == BT_RUNNING) {
@@ -2446,6 +2504,7 @@ int main(int argc, char *argv[])
 
         renderPage();
     }
+    check_and_clear_lowbat_flag(-1, false);
     bt_restore(); // MENU / SIGTERM during a test: put clock & brightness back
     free_resources();
     return EXIT_SUCCESS;
