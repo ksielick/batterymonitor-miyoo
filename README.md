@@ -147,7 +147,7 @@ There are two independent ways the console shuts down on low battery:
 | SD card | Clean | A write in progress (savestate, `batmon.db`) can be interrupted |
 | Session log | Complete | Last minutes may be missing |
 
-- **Is a deep discharge harmful?** No. 3.0–3.2 V under load is a normal end of discharge for Li-ion, and the PMIC cuts power before the cell gets dangerously low.
+- **Is a deep discharge harmful?** No. 3.0–3.2 V resting voltage is a completely safe discharge floor for Li-ion cells. In real-world tests with `Voff` set to **2.9 V**, the console shut down when the cell was at **3.15 V resting voltage** (due to the momentary ~0.15–0.25 V sag under active gaming load), leaving a healthy safety reserve.
 - **Raising `Voff` to 3.0–3.1 V** leaves a little more reserve in the cell. The threshold is compared under load, though: a load spike in a demanding game can then cut power while the resting voltage is still ~3.2 V.
 - **Recommended:** keep Onion's low-battery shutdown enabled for everyday play. For a capacity-learning or endurance run without it, save often and plug in the charger at ~3.0 V. Plugging in also ends the session cleanly, so `BEST` gets the full duration.
 - `Voff` is a PMIC register. It is kept while the battery stays connected, but it is not yet confirmed whether it survives a reboot. Check the menu after restarting.

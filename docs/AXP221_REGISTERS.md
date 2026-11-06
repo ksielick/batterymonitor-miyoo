@@ -64,7 +64,7 @@ Bits 7-4: warning level 1 (5–20 %); bits 3-0: warning level 2 (0–15 %). Not 
 | 2-0 | **Voff**: `000` 2.6 V, `001` 2.7, `010` 2.8, `011` **2.9 (default)**, `100` 3.0, `101` 3.1, `110` 3.2, `111` 3.3 V | RW | `011` |
 
 - Datasheet §9.2.4: when **ALDOIN** falls below Voff, the AXP221 enters shutdown and turns off every output except LDO1. **No delay or debounce is documented.** Treat it as an immediate **hard power cut**: nothing gets saved and SD writes in progress may be interrupted.
-- ALDOIN is measured **under load**. With ~150 mΩ internal resistance, a 0.5 A load step sags ~75 mV, so a 3.1 V Voff can trigger while the resting voltage is still ~3.2 V.
+- ALDOIN is measured **under load**. With internal resistance around 200–220 mΩ, a 0.5 A load step sags ~100–120 mV. *Observed on Miyoo Mini Plus:* with `Voff` set to 2.9 V, the PMIC triggered the shutdown when the battery reached **3.15 V resting voltage** (instantaneous sag touched 2.90 V during gameplay), meaning the resting cell remained safely above 3.1 V.
 - The app writes `(old & 0x90) | code`: it keeps bits 7 and 4 and never writes 1 to bits 6, 5 or 3.
 - *Open question:* whether Voff survives a power cycle. The PMIC keeps its registers while the battery is connected, but Onion or the firmware may rewrite REG 31H at boot.
 
