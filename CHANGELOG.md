@@ -15,21 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] - 2026-11-06
+
+### Added
+- **Auto-Clearing False Low-Battery Shutdown (`/tmp/.lowBat`):**
+  OnionOS `keymon` sets `/tmp/.lowBat` when battery hits <= 1%, but never removes it when charging starts or the battery level rises. When exiting any game or app, `runtime.sh` finds `.lowBat` and triggers a false shutdown. BatteryMonitorUI now automatically unlinks `/tmp/.lowBat` whenever charging or battery > 3% (startup, exit, 1s loop, and telemetry poll).
+- **Adjacent Charging Session Merging:**
+  Brief charger disconnects (< 60 s) discarded as noise in SQLite logs previously split a single charge into two separate sessions. `compute_graph()` now seamlessly merges adjacent charging sessions into a single continuous stretch with combined duration, level bounds, and unified green charging curve.
+- **CPU Affinity Pinning for Battery Health Test:**
+  Hard-pins worker stress threads directly to Core 0 and Core 1 via `pthread_setaffinity_np` to guarantee full dual-core saturation without thread migration.
+- **100% Backlight Boost during Battery Health Test:**
+  Sets screen brightness to 100% during the dual-core load stages to guarantee a strong current step ($\Delta I > 150\text{ mA}$) for noise-free internal resistance ($R_{int}$) calculation, restoring previous brightness immediately on finish, abort, or exit.
+- **Stock OnionOS Live `SESSION` Tracking:**
+  Derives session start time directly from `stat(BATTERY_LOG_FILE).st_mtime - duration` when running under stock OnionOS daemons (which log `start_time = NULL`), enabling live minute-by-minute session updates without modifying system binaries.
+
+### Fixed
+- **Battery Health Test Crash on Stock OnionOS (`glibc 2.28`):**
+  Bundled stub `lib/libpthread.so` and updated build flags (`-pthread -Wl,--no-as-needed -lpthread`) to ensure explicit linkage against `libpthread.so.0`, resolving runtime crashes when starting the health test on stock OnionOS.
+
+---
+
 ## [2.0.1] - 2026-11-04
 
 ### Added
 - **Battery Health Test (`[ A: Battery test ]`):** 3-stage internal resistance measurement, ~45 s total:
   - Stage 1: idle baseline (screen dimmed to Onion level 0, app idle under `ondemand`).
-  - Stage 2: 2 worker pthreads at 100% load hard-pinned to Core 0 and Core 1 (`pthread_setaffinity_np`) at 1200 MHz, with **screen brightness at 100%**.
-  - Stage 3: same load at 1600 MHz (`cpuclock` in `userspace` governor) with **screen brightness at 100%**.
-  - Screen at 100% provides the critical ~180-200 mA current step required for accurate delta I measurement (> 150 mA), while Cortex-A7 CPU cores draw ~36 mA (1200 MHz) and ~63 mA (1600 MHz) under 100% dual-core load.
-  - Measured baseline: **200–202 mΩ** with Wi-Fi off (pure DC, 1% repeatability) and 214–224 mΩ with Wi-Fi on (slight AC ripple from RF TX bursts).
+  - Stage 2: 2 worker pthreads at 100% load at 1200 MHz.
+  - Stage 3: same load at 1600 MHz (`cpuclock` in `userspace` governor).
   - Each stage lasts 15 s; only samples after a 7 s settle time (4 Hz) are averaged.
   - $R_{int} = (V_{idle} - V_{load}) / (I_{load} - I_{idle})$, rated **EXCELLENT** (< 160 mΩ), **GOOD** (< 260), **AGED** (< 380), **POOR / REPLACE**.
   - Safeguards: refuses to start below 3.60 V or with the charger connected; aborts below 3.50 V, on charger plug-in, on sleep, or with `[B]`. Original CPU clock, governor and brightness are restored on finish, abort, MENU exit, SIGTERM and `atexit`.
-- **Live `SESSION` duration tracking on stock OnionOS:**
-  - Stock `batmon` logs `start_time = NULL` in SQLite and only flushes every 10 min.
-  - Added automatic fallback deriving T0 from `stat(BATTERY_LOG_FILE).st_mtime - duration`, allowing `SESSION` to update smoothly live every 15 s without modifying system daemons.
 - **Shutdown Voltage setting (`Voff`, REG 31H bits 2-0):** new `[SELECT]` menu row `Shutdown Voltage: < 2.9 V >`, adjustable 2.6–3.1 V in 0.1 V steps with `[LEFT/RIGHT]`, saved with `[A]` and verified by read-back. The write preserves only bits 7 and 4; self-triggering bits 6 (soft restart), 5 (soft wakeup) and 3 (sleep wakeup) are always written as 0.
 
 ### Fixed

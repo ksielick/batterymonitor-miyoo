@@ -59,6 +59,9 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
   * Zero I2C overhead during normal gaming; only polls when the menu is active.
 
 ### 2. Enhanced Graph & Session Tracking
+
+![Enhanced Graph with 7.5h Playtime and Charging Slope](docs/screenshot_battery_life.png)
+
 * **Session & Charge Navigation:** Use **`[L1]` / `[R1]`** to step through previous gaming sessions and charges.
 * **Distinct Charging Curves:** Charges are plotted in **green** with full duration and percentage gained.
 * **Zoom Levels:** Use **`[L2]` / `[R2]`** to switch between 1-hour, 2-hour, and 4-hour grid zoom profiles.
@@ -87,7 +90,7 @@ The Miyoo Mini Plus includes an **X-Powers AXP221 PMIC chip** equipped with an i
 ## 📦 Installation (Drop-in Replacement)
 
 ### Method A: Via MicroSD Card (Recommended)
-1. Download **`BatteryMonitorUI_v2.0_OnionOS.zip`** from the [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases) page.
+1. Download **`BatteryMonitorUI_v2.0.2_OnionOS.zip`** from the [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases) page.
 2. Power off your console and insert the MicroSD card into your computer.
 3. *(Optional but recommended)* Rename or back up your existing `App/BatteryMonitorUI` folder on the SD card (e.g. to `BatteryMonitorUI.bak`).
 4. Extract the `BatteryMonitorUI` folder from the ZIP directly into the **`App/`** directory on your SD card:
@@ -179,7 +182,7 @@ Key build flags & configuration:
 - Glibc compatibility wrapper (`stat64` wrapped to `__xstat64@GLIBC_2.4`).
 - Stripped binary size: ~50 KB.
 
-**GitHub Actions:** every push builds the app on Ubuntu with the ARM GNU Toolchain 13.3.rel1 for Linux (cached) and uploads the `BatteryMonitorUI` folder as a build artifact (Actions tab → run → Artifacts). Pushing a `v*` tag (e.g. `v2.0.1`) also publishes a GitHub Release with `BatteryMonitorUI_<tag>_OnionOS.zip`. Locally, `build.sh` takes the toolchain from `$TOOLCHAIN`, falling back to a Windows (mingw) toolchain path.
+**GitHub Actions:** every push builds the app on Ubuntu with the ARM GNU Toolchain 13.3.rel1 for Linux (cached) and uploads the `BatteryMonitorUI` folder as a build artifact (Actions tab → run → Artifacts). Pushing a `v*` tag (e.g. `v2.0.2`) also publishes a GitHub Release with `BatteryMonitorUI_<tag>_OnionOS.zip`. Locally, `build.sh` takes the toolchain from `$TOOLCHAIN`, falling back to a Windows (mingw) toolchain path.
 
 For full technical details, version history, and architecture roadmap, see **[CHANGELOG.md](CHANGELOG.md)**. PMIC register notes: **[docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md)**.
 
