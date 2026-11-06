@@ -1588,8 +1588,7 @@ static void renderAxpMenu(void)
     SDL_Color col_warn = {240, 140, 100};
 
     // Header
-    drawCenteredText("HARDWARE PMIC & BATTERY MONITOR", font_title ? font_title : font_Arkhip, col_title, 0, 14, 640);
-    drawCenteredText("Live PMIC power management & fuel gauge telemetry", font_small ? font_small : font_Arkhip, col_sub, 0, 36, 640);
+    drawCenteredText("HARDWARE PMIC & BATTERY MONITOR", font_title ? font_title : font_Arkhip, col_title, 0, 20, 640);
 
     // Safeguard check
     if (!axp_status.available) {
