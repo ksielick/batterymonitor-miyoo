@@ -1416,7 +1416,7 @@ static void bt_start(Uint32 now)
     bt.state = BT_RUNNING;
 
     if (!axp_poll_data()) {
-        bt_abort("AXP221 not available");
+        bt_abort("PMIC not available");
         return;
     }
     if (axp_status.is_charging) {
@@ -1589,7 +1589,7 @@ static void renderAxpMenu(void)
 
     // Header
     drawCenteredText("HARDWARE PMIC & BATTERY MONITOR", font_title ? font_title : font_Arkhip, col_title, 0, 14, 640);
-    drawCenteredText("Live AXP221 power management & fuel gauge telemetry", font_small ? font_small : font_Arkhip, col_sub, 0, 36, 640);
+    drawCenteredText("Live PMIC power management & fuel gauge telemetry", font_small ? font_small : font_Arkhip, col_sub, 0, 36, 640);
 
     // Safeguard check
     if (!axp_status.available) {
@@ -1600,7 +1600,7 @@ static void renderAxpMenu(void)
         drawFrame2px(mx, my, mw, mh, err_border);
 
         drawCenteredText("HARDWARE FUEL GAUGE NOT AVAILABLE", font_title ? font_title : font_Arkhip, (SDL_Color){224, 108, 117}, mx, my + 25, mw);
-        drawCenteredText("This menu requires the AXP221 PMIC chip with hardware fuel gauge,", font_small ? font_small : font_Arkhip, col_val, mx, my + 70, mw);
+        drawCenteredText("This menu requires a PMIC chip with hardware fuel gauge,", font_small ? font_small : font_Arkhip, col_val, mx, my + 70, mw);
         drawCenteredText("which is present on the Miyoo Mini Plus (MIYOO354).", font_small ? font_small : font_Arkhip, col_val, mx, my + 92, mw);
         drawCenteredText("Your console model or revision does not provide", font_small ? font_small : font_Arkhip, col_sub, mx, my + 122, mw);
         drawCenteredText("I2C access to this hardware telemetry.", font_small ? font_small : font_Arkhip, col_sub, mx, my + 144, mw);
@@ -1745,7 +1745,7 @@ static void renderAxpMenu(void)
         drawFrame2px(mx, my, mw, mh, m_border);
 
         drawCenteredText("BATTERY CALIBRATION", font_title ? font_title : font_Arkhip, col_val, mx, my + 18, mw);
-        drawCenteredText("AXP221 battery capacity learning (REG B8H bit 5)", font_small ? font_small : font_Arkhip, col_title, mx, my + 44, mw);
+        drawCenteredText("Hardware PMIC battery capacity learning (REG B8H bit 5)", font_small ? font_small : font_Arkhip, col_title, mx, my + 44, mw);
 
         int ib_x = mx + 20, ib_y = my + 72, ib_w = mw - 40, ib_h = 130;
         Uint32 ib_bg = SDL_MapRGB(screen->format, 18, 28, 44);

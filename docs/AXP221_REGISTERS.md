@@ -1,6 +1,6 @@
-# AXP221 PMIC — Register Notes (Miyoo Mini Plus)
+# AXP223 / AXP221 PMIC — Register Notes (Miyoo Mini Plus)
 
-Reference for the registers Battery Monitor reads and writes. Source: **X-Powers AXP221 Datasheet, Revision 1.2 (2013-03-26)**, Chinese edition, translated where needed. Behaviour notes marked *observed* come from real use on a Miyoo Mini Plus, not from the datasheet.
+Reference for the registers Battery Monitor reads and writes. Hardware on the Miyoo Mini Plus motherboard is the **X-Powers AXP223** (part of the AXP22x PMIC family, fully register-compatible with AXP221). Sources: **X-Powers AXP223 Datasheet Revision 1.1** and **AXP221 Datasheet Revision 1.2**, translated where needed. Behaviour notes marked *observed* come from real use on a Miyoo Mini Plus, not from the datasheet.
 
 - I2C bus `/dev/i2c-1`, address `0x34`.
 - Datasheet copies: [monitor.espec.ws](https://monitor.espec.ws/download.php?id=154987). The linux-sunxi link quoted in kernel device trees (`dl.linux-sunxi.org/AXP/AXP221 Datasheet V1.2 20130326 .pdf`) was dead when we checked (2026-11).
