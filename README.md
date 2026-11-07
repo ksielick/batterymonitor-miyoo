@@ -113,16 +113,24 @@ The Miyoo Mini Plus includes an **X-Powers PMIC chip (AXP223 / AXP221)** equippe
 
 ---
 
-## 🔧 How to Calibrate Your Battery (4-Step Guide)
+## 🔧 How to Calibrate Your Battery (Full Learning Cycle)
 
-If your battery percentage drops abruptly under load or stays at 10% for hours, let the PMIC learn your battery's real capacity:
+If your battery percentage drops abruptly under load, stays at 10% for hours, or jumps unexpectedly, the PMIC needs one complete discharge-and-charge cycle to learn the true electrical capacity of your cell:
 
+> [!IMPORTANT]
+> **Crucial Prep for Calibration:**  
+> Temporarily set Onion's **Low batt.: Save and exit** to **Off** (*Apps → Tweaks → System* or *Settings → System*).  
+> If Onion's software shutdown is active (e.g. at 1%), it will shut the console down prematurely before the hardware PMIC can detect the true bottom threshold of the discharge curve, preventing calibration from completing!
+
+### Step-by-Step Calibration:
 1. **Charge to 100%:** Plug in the charger and charge until the battery reaches 100% and current draw drops to near 0 mA (or the charging LED turns off).
 2. **Enable Capacity Learning:** Open **Battery Monitor**, press **`[SELECT]`**, scroll down to `[ A: Enable capacity learning ]`, press **`[A]`**, and confirm. *Cap. Learning* will now read **Enabled**.
-3. **Discharge Deeply:** Unplug the charger and play normally until the console powers off. This is safe: the PMIC itself cuts power at the **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**; can be raised to 3.1 V in the menu).
-4. **Recharge to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous charge.
+3. **Discharge Completely (Let it Power Off):** Unplug the charger and play normally until the console powers off completely on its own. **You must let the battery discharge fully** so the PMIC detects the real bottom limit of the cell. This is completely safe: the PMIC itself cuts power at the hardware **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**), leaving a safe resting voltage of ~3.15 V in the cell.
+4. **Recharge Straight to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous, uninterrupted charge.
 
-Once complete, the PMIC writes the learned value into the battery total capacity register (`0xE0/0xE1`), visible as **Total Capacity** (e.g. `3167 mAh` on a stock 3000 mAh cell).
+Once complete, the PMIC automatically calculates and writes the learned value into the battery total capacity register (`0xE0/0xE1`), visible in the `[SELECT]` menu as **Total Capacity** (e.g. `3167 mAh` on a stock 3000 mAh cell).
+
+*(After calibration is complete, you can safely turn Onion's **Low batt.: Save and exit** back to `< 1% >` for everyday gameplay safety).*
 
 ### What the status fields mean (PMIC AXP22x, REG B8H)
 
