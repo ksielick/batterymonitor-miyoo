@@ -4,7 +4,7 @@
 [![Hardware](https://img.shields.io/badge/Miyoo_Mini_Plus-Hardware_PMIC-success.svg)](https://github.com/OnionUI/Onion)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-An enhanced rework of Onion OS's **Battery Monitor** app for the **Miyoo Mini** and **Miyoo Mini Plus**.
+An enhanced rework of Onion OS's **Battery Monitor** app for the **Miyoo Mini** (v1–v4), **Miyoo Mini Plus**, and **Miyoo Mini Flip**.
 
 Featuring **live hardware PMIC telemetry**, **Coulomb Counter energy tracking (mAh)**, **hardware battery calibration**, and **rich session history analysis**.
 
@@ -90,7 +90,7 @@ The Miyoo Mini Plus includes an **X-Powers PMIC chip (AXP223 / AXP221)** equippe
 ## 📦 Installation (Drop-in Replacement)
 
 ### Method A: Via MicroSD Card (Recommended)
-1. Download **`BatteryMonitorUI_v2.0_OnionOS.zip`** from the [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases) page.
+1. Download **`BatteryMonitorUI_v2.1_OnionOS.zip`** from the [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases) page.
 2. Power off your console and insert the MicroSD card into your computer.
 3. *(Optional but recommended)* Rename or back up your existing `App/BatteryMonitorUI` folder on the SD card (e.g. to `BatteryMonitorUI.bak`).
 4. Extract the `BatteryMonitorUI` folder from the ZIP directly into the **`App/`** directory on your SD card:
@@ -125,7 +125,9 @@ If your battery percentage drops abruptly under load, stays at 10% for hours, or
 ### Step-by-Step Calibration:
 1. **Charge to 100%:** Plug in the charger and charge until the battery reaches 100% and current draw drops to near 0 mA (or the charging LED turns off).
 2. **Enable Capacity Learning:** Open **Battery Monitor**, press **`[SELECT]`**, scroll down to `[ A: Enable capacity learning ]`, press **`[A]`**, and confirm. *Cap. Learning* will now read **Enabled**.
-3. **Discharge Completely (Let it Power Off):** Unplug the charger and play normally until the console powers off completely on its own. **You must let the battery discharge fully** so the PMIC detects the real bottom limit of the cell. This is completely safe: the PMIC itself cuts power at the hardware **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**), leaving a safe resting voltage of ~3.15 V in the cell.
+3. **Discharge Completely (Let it Power Off):** Unplug the charger and use the console normally down to about **10 %**. Then **leave the game, go back to the main menu and put the console to sleep** (short press of Power). Leave it asleep until the PMIC powers it off at the hardware **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**). The cell is left at a safe resting voltage of ~3.15 V. Asleep, the console draws ~245 mA, so the last 10 % takes roughly 1-1.5 hours. **You must let the battery discharge fully** so the PMIC detects the real bottom limit of the cell.
+   * **Why asleep:** the `Voff` cut-off is a hard power cut, and it can corrupt the SD card (see [Hard power-off and the SD card](#hard-power-off-and-the-sd-card)). In sleep, Onion has stopped every app (MainUI, games, `batmon`, Battery Monitor). Measured on a Mini Plus, SD card activity stops about 35 s after the console falls asleep, so the cut almost always lands while nothing is writing.
+   * Before you start: keep Onion's **Sleep timer** at *Never* for this cycle, or the console autosaves and powers off before the battery is empty. Turn **Wi-Fi off** (or don't connect over SMB/SSH while it drains): Samba and SSH keep running during sleep and could write to the card.
 4. **Recharge Straight to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous, uninterrupted charge.
 
 Once complete, the PMIC automatically calculates and writes the learned value into the battery total capacity register (`0xE0/0xE1`), visible in the `[SELECT]` menu as **Total Capacity** (e.g. `3167 mAh` on a stock 3000 mAh cell).
@@ -152,7 +154,7 @@ There are two independent ways the console shuts down on low battery:
 |:---|:---|:---|
 | Trigger | Battery percentage (Onion setting) | Voltage under load falls below `Voff` (default 2.9 V) |
 | Saves game / state | Yes | **No.** All outputs are cut immediately, with no documented delay |
-| SD card | Clean | A write in progress (savestate, `batmon.db`) can be interrupted |
+| SD card | Clean | A write in progress can be interrupted, and other files can be hit too (see below) |
 | Session log | Complete | Last minutes may be missing |
 
 - **Is a deep discharge harmful?** No. 3.0–3.2 V resting voltage is a completely safe discharge floor for Li-ion cells. In real-world tests with `Voff` set to **2.9 V**, the console shut down when the cell was at **3.15 V resting voltage** (due to the momentary ~0.15–0.25 V sag under active gaming load), leaving a healthy safety reserve.
@@ -160,16 +162,35 @@ There are two independent ways the console shuts down on low battery:
 - **Recommended:** keep Onion's low-battery shutdown enabled for everyday play. For a capacity-learning or endurance run without it, save often and plug in the charger at ~3.0 V. Plugging in also ends the session cleanly, so `BEST` gets the full duration.
 - `Voff` is a PMIC register. It is kept while the battery stays connected, but it is not yet confirmed whether it survives a reboot. Check the menu after restarting.
 
+### Hard power-off and the SD card
+
+A `Voff` cut-off can damage **files that nothing was writing at that moment**. Two reasons:
+- **The FAT is shared.** One FAT sector holds the cluster chains of many files. If the cut interrupts any write to it (a log line, Onion's clock file, `system.json`), neighbouring files can lose part of their chain.
+- **SD cards write internally in large blocks** (often several MB). An interrupted program or erase can damage data that was written earlier into the same block, even when it belongs to other files.
+
+*Observed on a Mini Plus (2026-11):* after several discharge-to-cutoff runs, with the console sitting in Battery Monitor (not in a game) at the cut, RetroArch's `retroarch.cfg` became unreadable. RetroArch then silently regenerated it with its own built-in defaults, not Onion's. The result: no sound (`audio_driver = "audioio"`), *Fatal error* in the Game Switcher, dead MENU hotkeys, and saves going to the wrong folder. Windows' disk check later found the lost pieces of `retroarch.cfg` and `system.json` in `FOUND.000`. The fix was to copy Onion's default `RetroArch/.retroarch/retroarch.cfg` back.
+
+What helps:
+- **Let the final stretch run with the console asleep** (calibration step 3). Apps are stopped and the card goes idle within about a minute.
+- After any hard power-off, put the card in a PC and let it check the disk. If RetroArch misbehaves afterwards, compare `retroarch.cfg` with Onion's default first.
+- Back up the card before deliberate discharge runs.
+
 Register-level details, datasheet sources and observed behaviour are in **[docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md)**.
 
 ---
 
 ## 🔍 Hardware Compatibility
 
+> [!NOTE]
+> **Compatibility Note:**  
+> This app will start on Miyoo Mini V1-V4, Miyoo Mini Plus, Miyoo Mini Flip, but only the Plus and Mini Flip have the hardware required for Capacity Learning. Miyoo A30 and Miyoo Flip are not supported.
+
 | Model | Chipset | Supported Features |
 |:---|:---|:---|
-| **Miyoo Mini Plus** (`MIYOO354`) | SigmaStar SSD202D + AXP223/AXP221 | **Full Support:** Live voltage, mA draw, Coulomb Counter, mAh tracking, calibration menu, enhanced graph. |
-| **Miyoo Mini v1 / v2 / v3** (`MIYOO283`) | SigmaStar SSD202D (No AXP) | **Graph & Session Features:** Session navigation (L1/R1), zoom (L2/R2), green charge curves, sleep stats. Displays *"Hardware Fuel Gauge Not Available"* when pressing `SELECT`. |
+| **Miyoo Mini Plus** (`MIYOO354`) | SigmaStar SSD202D + AXP223/AXP221 PMIC | **Full Support:** Live voltage, mA draw, Coulomb Counter, mAh tracking, Capacity Learning, Battery Health test, enhanced graph. |
+| **Miyoo Mini Flip** (`MIYOO285`) | SigmaStar SSD202D + AXP223/AXP221 PMIC | **Full Support:** Live voltage, mA draw, Coulomb Counter, mAh tracking, Capacity Learning, Battery Health test, enhanced graph. |
+| **Miyoo Mini v1 / v2 / v3 / v4** (`MIYOO283`) | SigmaStar SSD202D (No AXP PMIC) | **Graph & Session Features:** Session navigation (L1/R1), zoom (L2/R2), green charge curves, sleep stats. Pressing `[SELECT]` shows *"Hardware Fuel Gauge Not Available"*. |
+| **Miyoo A30 / Miyoo Flip** | Allwinner A33 / Rockchip RK3566 | **Not Supported** (different architecture / non-OnionOS platforms). |
 
 ---
 
