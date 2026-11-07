@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the standalone **Battery Monitor for Miyoo Mini & Miyoo Mini Plus** will be documented in this file.
+All notable changes to the standalone **Battery Monitor for Miyoo Mini, Mini Plus & Mini Flip** will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -12,6 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planned
 - **Wi-Fi off during the battery health test** (`ifconfig wlan0 down` + guaranteed restore) for an even quieter idle baseline.
 - **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
+- **Safe drain mode:** near the end of a capacity-learning discharge, stop the apps that write, `sync`, and remount the SD card read-only, so the PMIC `Voff` hard cut cannot corrupt it. Remounting read-only while Onion runs is not tested yet. This would also change the Accelerated Discharge idea: a drain under load ends with a hard cut while the card may be busy.
+
+---
+
+## [2.1] - 2026-11-07
+
+### Added
+- **Miyoo Mini Flip (`MIYOO285`) support for the PMIC features**: live telemetry, Coulomb counter, Capacity Learning, Shutdown Voltage and charging detection. They now check `HAS_AXP()` (Mini Plus or Mini Flip, as in Onion's `device_model.h`) instead of the Mini Plus only. Both models have the same AXP on `/dev/i2c-1` @ 0x34 and the same `/customer/app/axp_test`. Not yet tested on real Mini Flip hardware.
+- The "Hardware fuel gauge not available" dialog now lists which models have the PMIC features (Mini Plus, Mini Flip), which get the graph and session tracking only (Mini V1-V4), and which are not supported (A30, Miyoo Flip).
+
+### Fixed
+- `battery_isCharging()`: no crash when `axp_test` cannot be started, and no uninitialised value when it prints nothing.
+
+### Changed (docs)
+- README: calibration step 3 now drains the last ~10 % with the console **asleep** (apps stopped, SD card idle about 35 s after it falls asleep, ~245 mA), instead of playing until the cut-off. New section *Hard power-off and the SD card*: a `Voff` cut can damage files that were not being written (shared FAT sectors, SD erase blocks). Observed case: a corrupted `retroarch.cfg` was regenerated with RetroArch defaults.
 
 ---
 

@@ -73,14 +73,16 @@ bool battery_isCharging(void)
 
         return charging == '1';
     }
-    else if (DEVICE_ID == MIYOO354) {
+    else if (HAS_AXP()) { // Mini Plus and Mini Flip
         char *cmd = "cd /customer/app/ ; ./axp_test";
         int batJsonSize = 100;
         char buf[batJsonSize];
-        int charge_number;
+        int charge_number = 0;
 
         FILE *fp;
         fp = popen(cmd, "r");
+        if (fp == NULL)
+            return false;
         if (fgets(buf, batJsonSize, fp) != NULL) {
             sscanf(buf, "{\"battery\":%*d, \"voltage\":%*d, \"charging\":%d}",
                    &charge_number);

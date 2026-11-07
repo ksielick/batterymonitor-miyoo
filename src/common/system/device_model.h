@@ -5,7 +5,13 @@
 #include <stdio.h>
 
 #define MIYOO283 283
+#define MIYOO285 285 // Miyoo Mini Flip
 #define MIYOO354 354
+
+// Same as Onion's device_model.h: the Mini Plus and the Mini Flip have the
+// AXP PMIC (i2c-1 @ 0x34, /customer/app/axp_test) and Wi-Fi.
+#define IS_MIYOO_PLUS_OR_FLIP() (DEVICE_ID == MIYOO285 || DEVICE_ID == MIYOO354)
+#define HAS_AXP() IS_MIYOO_PLUS_OR_FLIP()
 
 static int DEVICE_ID;
 static char DEVICE_SN[13];

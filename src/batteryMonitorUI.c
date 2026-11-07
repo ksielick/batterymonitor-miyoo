@@ -575,7 +575,7 @@ static void check_and_clear_lowbat_flag(int battery_pct, bool is_charging)
     }
 }
 
-// Battery voltage from batmon's last reading. On the Mini Plus that is axp_test's output
+// Battery voltage from batmon's last reading. On the Mini Plus and Mini Flip that is axp_test's output
 // (millivolts); on the Mini batmon writes the smoothed ADC value there instead, which it
 // turns into volts as (adc - 148) / 100. Returns true when the text changed.
 bool read_battery_voltage(void)
@@ -599,7 +599,7 @@ bool read_battery_voltage(void)
 
     check_and_clear_lowbat_flag(-1, charging != 0);
 
-    if (DEVICE_ID == MIYOO354) {
+    if (HAS_AXP()) {
         if (voltage > 0) {
             int cv = (voltage + 5) / 10;
             snprintf(text, sizeof(text), "%d.%02dV", cv / 100, cv % 100);
@@ -997,7 +997,7 @@ static int axp_i2c_write(int fd, unsigned char reg, unsigned char val)
 
 static bool axp_poll_data(void)
 {
-    if (DEVICE_ID != MIYOO354) {
+    if (!HAS_AXP()) {
         axp_status.available = false;
         return false;
     }
@@ -1078,7 +1078,7 @@ static bool axp_poll_data(void)
 
 static bool axp_set_capacity(int mah)
 {
-    if (DEVICE_ID != MIYOO354 || mah <= 0 || mah > 10000)
+    if (!HAS_AXP() || mah <= 0 || mah > 10000)
         return false;
     int fd = open(AXP_I2C_DEV, O_RDWR);
     if (fd < 0) return false;
@@ -1101,7 +1101,7 @@ static bool axp_set_capacity(int mah)
 
 static bool axp_set_coulomb_counter(int mah)
 {
-    if (DEVICE_ID != MIYOO354 || mah <= 0 || mah > 10000)
+    if (!HAS_AXP() || mah <= 0 || mah > 10000)
         return false;
     int fd = open(AXP_I2C_DEV, O_RDWR);
     if (fd < 0) return false;
@@ -1130,7 +1130,7 @@ static bool axp_set_coulomb_counter(int mah)
 // Returns 0 on success, -1 on I2C failure, -2 when the read-back value differs.
 static int axp_set_voff(int code)
 {
-    if (DEVICE_ID != MIYOO354 || code < 0 || code > 7)
+    if (!HAS_AXP() || code < 0 || code > 7)
         return -1;
     int fd = open(AXP_I2C_DEV, O_RDWR);
     if (fd < 0) return -1;
@@ -1161,7 +1161,7 @@ static int axp_set_voff(int code)
 // Returns 0 on success, -1 on I2C failure, -2 when the PMIC did not accept the new bit 5 value.
 static int axp_set_calibration(bool on)
 {
-    if (DEVICE_ID != MIYOO354)
+    if (!HAS_AXP())
         return -1;
     int fd = open(AXP_I2C_DEV, O_RDWR);
     if (fd < 0) return -1;
@@ -1598,11 +1598,11 @@ static void renderAxpMenu(void)
         drawRectFill(mx, my, mw, mh, err_bg);
         drawFrame2px(mx, my, mw, mh, err_border);
 
-        drawCenteredText("HARDWARE FUEL GAUGE NOT AVAILABLE", font_title ? font_title : font_Arkhip, (SDL_Color){224, 108, 117}, mx, my + 25, mw);
-        drawCenteredText("This menu requires a PMIC chip with hardware fuel gauge,", font_small ? font_small : font_Arkhip, col_val, mx, my + 70, mw);
-        drawCenteredText("which is present on the Miyoo Mini Plus (MIYOO354).", font_small ? font_small : font_Arkhip, col_val, mx, my + 92, mw);
-        drawCenteredText("Your console model or revision does not provide", font_small ? font_small : font_Arkhip, col_sub, mx, my + 122, mw);
-        drawCenteredText("I2C access to this hardware telemetry.", font_small ? font_small : font_Arkhip, col_sub, mx, my + 144, mw);
+        drawCenteredText("HARDWARE FUEL GAUGE NOT AVAILABLE", font_title ? font_title : font_Arkhip, (SDL_Color){224, 108, 117}, mx, my + 22, mw);
+        drawCenteredText("Capacity Learning requires an AXP PMIC chip,", font_small ? font_small : font_Arkhip, col_val, mx, my + 62, mw);
+        drawCenteredText("present only on Miyoo Mini Plus and Mini Flip.", font_small ? font_small : font_Arkhip, col_val, mx, my + 84, mw);
+        drawCenteredText("Miyoo Mini V1-V4 can use graph & session tracking.", font_small ? font_small : font_Arkhip, col_sub, mx, my + 114, mw);
+        drawCenteredText("Miyoo A30 and Miyoo Flip are not supported.", font_small ? font_small : font_Arkhip, col_sub, mx, my + 136, mw);
 
         drawBadgePill("[B / SELECT] Back to Graph", font_small ? font_small : font_Arkhip, col_val, col_sel_bg, col_sel_border, mx + 150, my + 185, 220, 32);
         return;
@@ -2011,9 +2011,9 @@ void renderPage()
             else
                 snprintf(sleep_text, sizeof(sleep_text), " +%s SLEEP -%d%%", t, sel->sleep_drop);
         }
-        // the date only with a hardware clock (Mini Plus): the Mini's clock restarts from
+        // the date only with a hardware clock (Mini Plus, Mini Flip): the Mini's clock restarts from
         // the time saved at shutdown
-        if (sel->has_times && DEVICE_ID == MIYOO354) {
+        if (sel->has_times && HAS_AXP()) {
             time_t t = (time_t)sel->start_time;
             struct tm *lt = localtime(&t);
             if (lt != NULL)
