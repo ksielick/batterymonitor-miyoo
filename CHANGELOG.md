@@ -14,7 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
 - **Safe drain mode:** near the end of a capacity-learning discharge, stop the apps that write, `sync`, and remount the SD card read-only, so the PMIC `Voff` hard cut cannot corrupt it. Remounting read-only while Onion runs is not tested yet. This would also change the Accelerated Discharge idea: a drain under load ends with a hard cut while the card may be busy.
 
-### Changed (tested on a Mini Plus with a factory-reset PMIC, 2026-11-08)
+---
+
+## [2.2] - 2026-11-08
+
+Tested on a Miyoo Mini Plus with Onion 4.4.0-beta and RedOnion 4.5.0.
+
+### Changed (tested on a Mini Plus with a factory-reset PMIC)
 - **Unconfigured PMIC on screen:** *Energy Remaining* and *Total Capacity* show `Not set` instead of `0 mAh` while no capacity is saved, and *Coulomb Ctr (CC)* shows `--` while REG E5H bit 7 is clear (it reads a meaningless 100 % then).
 - **Next-step hint** on the right of *BATTERY SETTINGS & ACTIONS*: `Charge to 100%, then save capacity`, or `Battery full: save capacity now` once a charge has finished at 100 %; with a capacity set, `Counter high: sync at 100%` when the counter is more than 50 mAh above the capacity (the PMIC never trims it back).
 - **Saving a capacity while charging asks first** (*STILL CHARGING*): the PMIC seeds its counter from the voltage, which reads high while charging. `[A] Save anyway` / `[B] Cancel`.

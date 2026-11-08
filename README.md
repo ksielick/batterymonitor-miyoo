@@ -1,9 +1,10 @@
 # Onion Battery Monitor V2
 
 [![Onion OS](https://img.shields.io/badge/Onion_OS-v4.2_%7C_v4.3_%7C_v4.4-blue.svg)](https://github.com/OnionUI/Onion)
+[![RedOnion](https://img.shields.io/badge/RedOnion-v4.5-red.svg)](https://github.com/Amiga500/Onion)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-A better **Battery Monitor** app for Onion OS on the **Miyoo Mini**, **Mini Plus** and **Mini Flip**.
+A better **Battery Monitor** app for Onion OS on the **Miyoo Mini**, **Mini Plus** and **Mini Flip**. Tested on a Miyoo Mini Plus with **Onion 4.4.0-beta** and **RedOnion 4.5.0**.
 
 ![Battery Monitor V2 menu](docs/screenshot_axp_menu.png)
 
@@ -16,7 +17,7 @@ A better **Battery Monitor** app for Onion OS on the **Miyoo Mini**, **Mini Plus
 
 ## Install
 
-1. Download `BatteryMonitorUI_v2.1_OnionOS.zip` from [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases).
+1. Download `BatteryMonitorUI_v2.2_OnionOS.zip` from [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases).
 2. Put the SD card in your computer. Optionally, back up the old `App/BatteryMonitorUI` folder.
 3. Copy the `BatteryMonitorUI` folder from the ZIP into `App/` on the card, replacing the old one.
 4. Start **Battery Monitor** from **Apps**.
