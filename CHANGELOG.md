@@ -13,10 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wi-Fi off during the battery health test** (`ifconfig wlan0 down` + guaranteed restore) for an even quieter idle baseline.
 - **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
 - **Safe drain mode:** near the end of a capacity-learning discharge, stop the apps that write, `sync`, and remount the SD card read-only, so the PMIC `Voff` hard cut cannot corrupt it. Remounting read-only while Onion runs is not tested yet. This would also change the Accelerated Discharge idea: a drain under load ends with a hard cut while the card may be busy.
-- **Unconfigured PMIC on screen:** show `Not set` instead of `0 mAh` while no capacity is saved, and `—` for the Coulomb counter % while REG E5H bit 7 is clear (it reads a meaningless 100 % then).
+
+### Changed (tested on a Mini Plus with a factory-reset PMIC, 2026-11-08)
+- **Unconfigured PMIC on screen:** *Energy Remaining* and *Total Capacity* show `Not set` instead of `0 mAh` while no capacity is saved, and *Coulomb Ctr (CC)* shows `--` while REG E5H bit 7 is clear (it reads a meaningless 100 % then).
+- **Next-step hint** on the right of *BATTERY SETTINGS & ACTIONS*: `Charge to 100%, then save capacity`, or `Battery full: save capacity now` once a charge has finished at 100 %; with a capacity set, `Counter high: sync at 100%` when the counter is more than 50 mAh above the capacity (the PMIC never trims it back).
+- **Saving a capacity while charging asks first** (*STILL CHARGING*): the PMIC seeds its counter from the voltage, which reads high while charging. `[A] Save anyway` / `[B] Cancel`.
+- **Capacity learning dialog** follows the safe order: charge to 100 % and save the capacity first (highlighted while no capacity is set), sleep through the last ~10 % until the PMIC powers off, then charge straight to 100 % (*Correction: In progress*).
 
 ### Documentation
-- README: calibration now starts with the safe order **charge to 100 % → set the battery capacity → enable capacity learning**, with the measured reason: saving a capacity makes the PMIC seed the Coulomb counter from the voltage, which reads high while charging (counter 3085 mAh of 2800, never trimmed by the PMIC).
+- README rewritten for players (what it does, install, controls, one-time battery setup, optional learning cycle); register values, PMIC behaviour, the `Voff` cut-off, SD card notes and build steps moved to `docs/TECHNICAL.md`.
+- Calibration starts with the safe order **charge to 100 % → set the battery capacity → enable capacity learning**, with the measured reason: saving a capacity makes the PMIC seed the Coulomb counter from the voltage, which reads high while charging (counter 3085 mAh of 2800, never trimmed by the PMIC). *Correction* turns *In progress* only in the charge after a PMIC power-off at `Voff` (observed).
 
 ---
 

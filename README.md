@@ -38,7 +38,7 @@ A better **Battery Monitor** app for Onion OS on the **Miyoo Mini**, **Mini Plus
 
 This makes the battery % steady. Do it in this order:
 
-1. **Charge to 100 %** and wait until charging has really finished.
+1. **Charge to 100 %** (until the red light on the console goes off).
 2. Open Battery Monitor, press `SELECT`, set **Battery Capacity** (3000 mAh for the original battery) and press `A`.
    *Energy Remaining* and *Total Capacity* should now show about the same number. If not, press **Set current capacity to 100%**.
 3. Press **Enable capacity learning** and confirm.
