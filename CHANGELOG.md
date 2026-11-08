@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wi-Fi off during the battery health test** (`ifconfig wlan0 down` + guaranteed restore) for an even quieter idle baseline.
 - **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
 - **Safe drain mode:** near the end of a capacity-learning discharge, stop the apps that write, `sync`, and remount the SD card read-only, so the PMIC `Voff` hard cut cannot corrupt it. Remounting read-only while Onion runs is not tested yet. This would also change the Accelerated Discharge idea: a drain under load ends with a hard cut while the card may be busy.
+- **Unconfigured PMIC on screen:** show `Not set` instead of `0 mAh` while no capacity is saved, and `—` for the Coulomb counter % while REG E5H bit 7 is clear (it reads a meaningless 100 % then).
+
+### Documentation
+- README: calibration now starts with the safe order **charge to 100 % → set the battery capacity → enable capacity learning**, with the measured reason: saving a capacity makes the PMIC seed the Coulomb counter from the voltage, which reads high while charging (counter 3085 mAh of 2800, never trimmed by the PMIC).
 
 ---
 

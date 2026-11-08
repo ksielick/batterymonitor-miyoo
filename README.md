@@ -123,12 +123,16 @@ If your battery percentage drops abruptly under load, stays at 10% for hours, or
 > If Onion's software shutdown is active (e.g. at 1%), it will shut the console down prematurely before the hardware PMIC can detect the true bottom threshold of the discharge curve, preventing calibration from completing!
 
 ### Step-by-Step Calibration:
-1. **Charge to 100%:** Plug in the charger and charge until the battery reaches 100% and current draw drops to near 0 mA (or the charging LED turns off).
-2. **Enable Capacity Learning:** Open **Battery Monitor**, press **`[SELECT]`**, scroll down to `[ A: Enable capacity learning ]`, press **`[A]`**, and confirm. *Cap. Learning* will now read **Enabled**.
-3. **Discharge Completely (Let it Power Off):** Unplug the charger and use the console normally down to about **10 %**. Then **leave the game, go back to the main menu and put the console to sleep** (short press of Power). Leave it asleep until the PMIC powers it off at the hardware **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**). The cell is left at a safe resting voltage of ~3.15 V. Asleep, the console draws ~245 mA, so the last 10 % takes roughly 1-1.5 hours. **You must let the battery discharge fully** so the PMIC detects the real bottom limit of the cell.
+1. **Charge to 100%:** Plug in the charger and charge until the battery reaches 100% and current draw drops to near 0 mA (or the charging LED turns off). Finish this step first: the next one depends on it.
+2. **Set the Battery Capacity:** Open **Battery Monitor**, press **`[SELECT]`**, set `Battery Capacity` with **`[LEFT/RIGHT]`** to your cell's rated capacity (3000 mAh for the stock Mini Plus battery; the learning cycle corrects it later) and press **`[A]`**. **Total Capacity** and **Energy Remaining** should now both show about that value. If Energy Remaining is clearly different, press `[ A: Set current capacity to 100% ]`.
+3. **Enable Capacity Learning:** Scroll down to `[ A: Enable capacity learning ]`, press **`[A]`**, and confirm. *Cap. Learning* will now read **Enabled**.
+4. **Discharge Completely (Let it Power Off):** Unplug the charger and use the console normally down to about **10 %**. Then **leave the game, go back to the main menu and put the console to sleep** (short press of Power). Leave it asleep until the PMIC powers it off at the hardware **Shutdown Voltage** (`Voff`, REG 31H, default **2.9 V**). The cell is left at a safe resting voltage of ~3.15 V. Asleep, the console draws ~245 mA, so the last 10 % takes roughly 1-1.5 hours. **You must let the battery discharge fully** so the PMIC detects the real bottom limit of the cell.
    * **Why asleep:** the `Voff` cut-off is a hard power cut, and it can corrupt the SD card (see [Hard power-off and the SD card](#hard-power-off-and-the-sd-card)). In sleep, Onion has stopped every app (MainUI, games, `batmon`, Battery Monitor). Measured on a Mini Plus, SD card activity stops about 35 s after the console falls asleep, so the cut almost always lands while nothing is writing.
    * Before you start: keep Onion's **Sleep timer** at *Never* for this cycle, or the console autosaves and powers off before the battery is empty. Turn **Wi-Fi off** (or don't connect over SMB/SSH while it drains): Samba and SSH keep running during sleep and could write to the card.
-4. **Recharge Straight to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous, uninterrupted charge.
+5. **Recharge Straight to 100%:** Plug the charger back in and let it charge straight to 100% in one continuous, uninterrupted charge.
+
+> [!NOTE]
+> **Why this order (measured on a Mini Plus):** on a PMIC that was never set up (new console, or after the battery was unplugged), **Total Capacity** and **Energy Remaining** show `0 mAh` and the Coulomb counter has no value yet. The moment you save a capacity, the PMIC fills the counter by itself from the battery voltage. If you do it while the battery is still charging, the voltage reads high: the counter started at 2806 mAh of 2800, the rest of the charge pushed it to 3085 mAh, and the PMIC never trims it back to the capacity. Saved after a finished charge, the counter starts right. Changing the capacity later (e.g. in the middle of a discharge) also works; press `[ A: Set current capacity to 100% ]` at the next full charge to line the counter up again.
 
 Once complete, the PMIC automatically calculates and writes the learned value into the battery total capacity register (`0xE0/0xE1`), visible in the `[SELECT]` menu as **Total Capacity** (e.g. `3167 mAh` on a stock 3000 mAh cell).
 
@@ -171,7 +175,7 @@ A `Voff` cut-off can damage **files that nothing was writing at that moment**. T
 *Observed on a Mini Plus (2026-11):* after several discharge-to-cutoff runs, with the console sitting in Battery Monitor (not in a game) at the cut, RetroArch's `retroarch.cfg` became unreadable. RetroArch then silently regenerated it with its own built-in defaults, not Onion's. The result: no sound (`audio_driver = "audioio"`), *Fatal error* in the Game Switcher, dead MENU hotkeys, and saves going to the wrong folder. Windows' disk check later found the lost pieces of `retroarch.cfg` and `system.json` in `FOUND.000`. The fix was to copy Onion's default `RetroArch/.retroarch/retroarch.cfg` back.
 
 What helps:
-- **Let the final stretch run with the console asleep** (calibration step 3). Apps are stopped and the card goes idle within about a minute.
+- **Let the final stretch run with the console asleep** (calibration step 4). Apps are stopped and the card goes idle within about a minute.
 - After any hard power-off, put the card in a PC and let it check the disk. If RetroArch misbehaves afterwards, compare `retroarch.cfg` with Onion's default first.
 - Back up the card before deliberate discharge runs.
 
