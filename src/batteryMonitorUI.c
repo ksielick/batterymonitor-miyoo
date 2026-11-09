@@ -1802,16 +1802,11 @@ static void renderAxpMenu(void)
         }
         else {
             // The safe order: capacity saved after a finished charge, so the counter starts right.
-            // Correction only runs in the charge after a PMIC power-off at Voff (observed on a Mini Plus).
+            // Correction starts when the charger goes in after a discharge to ~1 %; no Voff cut needed (observed on a Mini Plus).
             renderText(axp_status.cap_set ? "1. Capacity is set (best saved right after a full charge)."
                                           : "1. First charge to 100%, then save Battery Capacity.",
                        font_small ? font_small : font_Arkhip, axp_status.cap_set ? col_val : col_warn, &(SDL_Rect){ib_x + 16, ib_y + 14, ib_w - 32, 20});
-            char step2[80];
-            if (axp_status.voff_code >= 0)
-                snprintf(step2, sizeof(step2), "2. At ~10%% sleep until it powers off (%.1f V).", voff_code_to_mv(axp_status.voff_code) / 1000.0);
-            else
-                snprintf(step2, sizeof(step2), "2. At ~10%% sleep until it powers off by itself.");
-            renderText(step2, font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 40, ib_w - 32, 20});
+            renderText("2. Play down to 1%, then plug in the charger.", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 40, ib_w - 32, 20});
             renderText("3. Charge straight to 100% (Correction: In progress).", font_small ? font_small : font_Arkhip, col_val, &(SDL_Rect){ib_x + 16, ib_y + 66, ib_w - 32, 20});
             renderText("4. The PMIC then saves the learned Total Capacity.", font_small ? font_small : font_Arkhip, col_green, &(SDL_Rect){ib_x + 16, ib_y + 92, ib_w - 32, 20});
         }
