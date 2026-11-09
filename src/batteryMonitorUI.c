@@ -113,6 +113,8 @@ typedef struct {
     long long start_time, end_time, tail_time;
     long long sleep; // a session: seconds asleep within it (clock gaps between entries)
     int sleep_drop;  // a session: percent lost across those gaps
+    // a charge: the widest level jump while the console was off (off_to > off_from), else 0
+    int off_from, off_to;
 } session_mark;
 
 static session_mark session_marks[MAX_SESSION_MARKS];
@@ -649,6 +651,7 @@ void compute_graph(void)
     // sleep found inside the stretch: seconds, and percent lost across it
     long long run_sleep = 0;
     int run_sleep_drop = 0, run_rows = 0, newer_row_level = 0;
+    int run_off_from = 0, run_off_to = 0; // the widest jump in a charge (console off)
     int estimate_shift = 0;
     (void)rows_end_charging;
 
@@ -807,6 +810,8 @@ void compute_graph(void)
                             m->tail_time = run_tail_time;
                             m->sleep = run_sleep;
                             m->sleep_drop = run_sleep_drop;
+                            m->off_from = run_off_from;
+                            m->off_to = run_off_to;
                         }
                         first_run = false;
                         run_end_index = -1;
@@ -825,6 +830,15 @@ void compute_graph(void)
                         run_rows = 0;
                         run_sleep = 0;
                         run_sleep_drop = 0;
+                        run_off_from = run_off_to = 0;
+                    }
+                    // A charge that went on while the console was off: the level jumps between
+                    // two entries (the Mini logs 500+ while charging, so only real levels count)
+                    if (run_rows > 0 && is_charging && raw_level <= 100 && newer_row_level <= 100 &&
+                        newer_row_level - raw_level > CHARGE_OFF_JUMP_MIN &&
+                        newer_row_level - raw_level > run_off_to - run_off_from) {
+                        run_off_from = raw_level;
+                        run_off_to = newer_row_level;
                     }
                     // Sleep inside a session on battery: the clock gap between this entry's
                     // end and the newer entry's start (batmon is stopped while asleep, so
@@ -880,6 +894,8 @@ void compute_graph(void)
                     m->tail_time = run_tail_time;
                     m->sleep = run_sleep;
                     m->sleep_drop = run_sleep_drop;
+                    m->off_from = run_off_from;
+                    m->off_to = run_off_to;
                 }
             }
 
@@ -893,6 +909,11 @@ void compute_graph(void)
                     session_marks[i].has_times = session_marks[i].has_times && session_marks[i + 1].has_times;
                     session_marks[i].sleep += session_marks[i + 1].sleep;
                     session_marks[i].sleep_drop += session_marks[i + 1].sleep_drop;
+                    if (session_marks[i + 1].off_to - session_marks[i + 1].off_from >
+                        session_marks[i].off_to - session_marks[i].off_from) {
+                        session_marks[i].off_from = session_marks[i + 1].off_from;
+                        session_marks[i].off_to = session_marks[i + 1].off_to;
+                    }
                     for (int k = session_marks[i + 1].start_index; k <= session_marks[i].end_index; k++) {
                         if (k >= 0 && k < graph_max_size) {
                             graphic[k].is_charging = true;
@@ -2059,6 +2080,14 @@ void renderPage()
             }
         }
         secondsToHoursMinutes(main_len, length_text);
+        // without clock times a charge counts awake time only: when it went on while the
+        // console was off, its length is a lower bound ("0h44+") and the jump is shown
+        char off_text[32] = "";
+        bool off_gap = sel->is_charge && !sel->has_times && sel->off_to > sel->off_from;
+        if (off_gap) {
+            strncat(length_text, "+", sizeof(length_text) - strlen(length_text) - 1);
+            snprintf(off_text, sizeof(off_text), " OFF %d-%d%%", sel->off_from, sel->off_to);
+        }
         // the Mini logs no percentage while charging (500)
         if (sel->start_level <= 100 && sel->end_level <= 100)
             snprintf(levels_text, sizeof(levels_text), " (%d%%-%d%%)", sel->start_level, sel->end_level);
@@ -2089,9 +2118,9 @@ void renderPage()
             if (lt != NULL)
                 strftime(date_text, sizeof(date_text), " %d.%m %H:%M", lt);
         }
-        snprintf(sub_title, sizeof(sub_title), "%s: %s%s%s%s%s%s",
+        snprintf(sub_title, sizeof(sub_title), "%s: %s%s%s%s%s%s%s",
                  sel->is_charge ? "CHARGE" : "SESSION", length_text,
-                 levels_text, tail_text, sleep_text, date_text, sel->is_current ? " NOW" : "");
+                 levels_text, off_text, tail_text, sleep_text, date_text, sel->is_current ? " NOW" : "");
     }
     // centred under the title
     int sub_w = 0, sub_h = 0;

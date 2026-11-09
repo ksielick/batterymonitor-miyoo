@@ -90,6 +90,7 @@ About 45 s: an idle baseline with the screen dimmed, then both CPU cores at 100 
 - `AVG` / `MIN` / `BEST` count **finished** sessions only, i.e. sessions that end with the charger plugged in. A running session, even a record one, appears in `BEST` after you plug in.
 - Durations come from Onion's `batmon` log, written when the percentage changes or at least every 10 minutes; a hard power cut can lose the last minutes.
 - Brief charger disconnects (under 60 s) are merged into one charge.
+- A charge done partly with the console off: batmon logs nothing then. With clock times in the log the charge is timed on the clock and the off time counts. Without them (RedOnion's and stock Onion's batmon leave `start_time` empty) only the awake time is known, so a level jump of more than 3 % between two entries marks the length as a lower bound: `CHARGE: 0h44+ (1%-100%) OFF 16-99%`.
 
 ## Compatibility
 

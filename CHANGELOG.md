@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.3] - 2026-11-09
+
+### Fixed
+- **Charge length when the console was off for part of it.** batmon logs nothing while the console is off, and without clock times in the log (RedOnion's and stock Onion's batmon leave `start_time` empty) a charge was timed on the awake time only: a 1-100 % charge mostly done with the console off showed `0h44`. A level jump of more than 3 % between two entries of a charge now marks the length as a lower bound and shows the jump: `CHARGE: 0h44+ (1%-100%) OFF 16-99%`. With clock times the charge is timed on the clock as before. Tested on a Mini Plus with RedOnion 4.5.0.
+
+---
+
 ## [2.2.2] - 2026-11-09
 
 ### Changed
