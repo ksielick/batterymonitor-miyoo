@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Accelerated Discharge Tool:** drain the battery faster for capacity-learning cycles without leaving a game running for hours.
 - **Safe drain mode:** near the end of a capacity-learning discharge, stop the apps that write, `sync`, and remount the SD card read-only, so the PMIC `Voff` hard cut cannot corrupt it. Remounting read-only while Onion runs is not tested yet. This would also change the Accelerated Discharge idea: a drain under load ends with a hard cut while the card may be busy.
 
+### Changed
+- README and `docs/TECHNICAL.md`: the learning cycle no longer runs the battery down to the PMIC `Voff` cut-off. Discharging to 1 % and plugging in the charger is enough: *Correction* turned *In progress* when the charger went in, with the console still running (observed 2026-11-09 on a Mini Plus). This avoids the hard power cut and its SD card risk. The in-app learning dialog still shows the old steps until the next release.
+
 ---
 
 ## [2.2] - 2026-11-08

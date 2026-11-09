@@ -52,15 +52,14 @@ That's it. Your battery is probably not as good as new, so the console will lear
 
 Old batteries hold less than 3000 mAh. One full cycle lets the console measure yours:
 
-1. **Before you start:** in Onion's settings, turn **Low batt.: Save and exit** off, set **Sleep timer** to **Never**, and turn **Wi-Fi off**.
-2. **Play down to about 10 %**, save your game, go back to the main menu and **put the console to sleep** (short press of Power).
-3. **Leave it asleep until it switches itself off** (about 1-1.5 hours). This is safe for the battery.
-4. **Charge straight to 100 % in one go.** In the battery menu, *Correction* shows **In progress** during this charge. If it says *Idle*, the console did not run all the way down; try again next time.
-5. Turn **Low batt.: Save and exit** back on.
+1. **Before you start:** in Onion's settings, turn **Low batt.: Save and exit** off and set **Sleep timer** to **Never**, so the console keeps running down to the end.
+2. **Play down to 1 %**, then save your game and go back to the main menu.
+3. **Plug in the charger at 1 %** and **charge straight to 100 % in one go.** In the battery menu, *Correction* switches to **In progress** once the charger is in. If it stays *Idle*, the battery was not low enough; try again next time.
+4. Turn **Low batt.: Save and exit** back on.
 
 After that charge, *Total Capacity* shows what your battery really holds (often well below 3000 mAh on an old battery).
 
-> Why asleep? At the very end the console cuts the power instantly, with no saving. Asleep, nothing is writing to the SD card, so the card stays safe. Still, back up your SD card first, and check it on a PC if the console ever shuts off this way during a game.
+> Don't wait for the console to switch itself off: at the very end it cuts the power instantly, with no saving, which can damage files on the SD card. Reaching 1 % is enough. Keep an eye on it near the end; if it does cut off, check the SD card on a PC.
 
 ## Good to know
 
