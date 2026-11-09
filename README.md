@@ -53,7 +53,7 @@ That's it. Your battery is probably not as good as new, so the console will lear
 Old batteries hold less than 3000 mAh. One full cycle lets the console measure yours:
 
 1. **Before you start:** in Onion's settings, turn **Low batt.: Save and exit** off and set **Sleep timer** to **Never**, so the console keeps running down to the end.
-2. **Play down to 1 %**, then save your game and go back to the main menu.
+2. **Discharge down to 1 %** (play, or leave it on), then save your game and go back to the main menu.
 3. **Plug in the charger at 1 %** and **charge straight to 100 % in one go.** In the battery menu, *Correction* switches to **In progress** once the charger is in. If it stays *Idle*, the battery was not low enough; try again next time.
 4. Turn **Low batt.: Save and exit** back on.
 

@@ -47,7 +47,7 @@ Unplugging the battery resets only REG B8H (learning off) and REG E0H-E3H (capac
 1. Charge to 100 % (current near 0 mA).
 2. Set the capacity, check that Energy Remaining is about Total Capacity (otherwise sync to 100 %).
 3. Enable learning.
-4. Set Onion's **Low batt.: Save and exit** to **Off** and **Sleep timer** to **Never**. Play or idle down to 1 % (REG B9H).
+4. Set Onion's **Low batt.: Save and exit** to **Off** and **Sleep timer** to **Never**. Discharge down to 1 % (REG B9H), playing or idle.
    - Onion's software shutdown would stop the drain before the gauge reaches the bottom.
    - The sleep timer would autosave and power off first.
 5. Plug in the charger at 1 % and charge straight to 100 % in one go. `Correction` switches to `In progress` when the charger goes in; at the end the PMIC writes the learned capacity into REG E0H/E1H (e.g. `3167 mAh` on a stock 3000 mAh cell).

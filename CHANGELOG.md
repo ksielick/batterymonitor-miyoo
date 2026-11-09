@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.2] - 2026-11-09
+
+### Changed
+- Learning dialog step 2 reads "Discharge down to 1%, then plug in the charger." (was "Play down to 1%..."): leaving the console on works as well as playing. README follows.
+
+---
+
 ## [2.2.1] - 2026-11-09
 
 ### Changed
