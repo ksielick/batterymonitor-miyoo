@@ -1,12 +1,12 @@
 # Battery Monitor: technical details
 
-The [README](../README.md) is the player guide. This page keeps the details behind it: what each value means, how the PMIC behaves, the low-battery cut-off and the SD card, and how to build the app. Register-level notes and datasheet sources are in [AXP221_REGISTERS.md](AXP221_REGISTERS.md).
+The [README](../README.md) is the player guide. This page keeps the details behind it: what each value means, how the PMIC behaves, the low-battery cut-off and the SD card, and how to build the app. Register-level notes and datasheet sources are in [AXP223_REGISTERS.md](AXP223_REGISTERS.md).
 
 ---
 
 ## Why the stock percentage jumps
 
-On the Miyoo Mini Plus and Mini Flip the battery percentage comes from the X-Powers PMIC (AXP223 / AXP221, register-compatible). Out of the box no battery capacity is set in it, so it estimates the level from the battery voltage (OCV). Under load the voltage sags, so the percentage:
+On the Miyoo Mini Plus and Mini Flip the battery percentage comes from the X-Powers PMIC (AXP223, register-compatible with AXP221). Out of the box no battery capacity is set in it, so it estimates the level from the battery voltage (OCV). Under load the voltage sags, so the percentage:
 - drops by 15-25 % when a demanding emulator starts (PS1, GBA...),
 - can stay at 10 % or 4 % for up to 2 hours of play,
 - jumps up or down after a wake from sleep.
@@ -96,8 +96,8 @@ About 45 s: an idle baseline with the screen dimmed, then both CPU cores at 100 
 
 | Model | Chipset | Features |
 |:---|:---|:---|
-| Miyoo Mini Plus (`MIYOO354`) | SigmaStar SSD202D + AXP223/AXP221 | Everything |
-| Miyoo Mini Flip (`MIYOO285`) | SigmaStar SSD202D + AXP223/AXP221 | Everything |
+| Miyoo Mini Plus (`MIYOO354`) | SigmaStar SSD202D + AXP223 | Everything |
+| Miyoo Mini Flip (`MIYOO285`) | SigmaStar SSD202D + AXP223 | Everything |
 | Miyoo Mini v1-v4 (`MIYOO283`) | SigmaStar SSD202D, no PMIC | Graph and sessions; `[SELECT]` shows *Hardware Fuel Gauge Not Available* |
 | Miyoo A30 / Miyoo Flip | Allwinner A33 / Rockchip RK3566 | Not supported (not Onion) |
 

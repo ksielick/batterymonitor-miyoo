@@ -34,7 +34,7 @@ static char battery_voltage[16];
 static TTF_Font *font_small = NULL;
 static TTF_Font *font_tiny = NULL;
 
-// AXP221 Telemetry & Menu State
+// AXP223 Telemetry & Menu State
 static bool show_axp_menu = false;
 static bool axp_confirm_calib = false;
 static bool axp_confirm_btest = false;
@@ -1151,7 +1151,7 @@ static bool axp_set_coulomb_counter(int mah)
     return ok;
 }
 
-// AXP221 datasheet v1.2, REG 31H (wakeup control & Voff), default 03H:
+// AXP223 datasheet v1.1 / AXP221 v1.2, REG 31H (wakeup control & Voff), default 03H:
 //   bit 7 PWROK pull-low on wakeup (RW, keep), bit 6 soft restart (write 1 = PMU reboots!),
 //   bit 5 soft wakeup (write 1 = outputs restored), bit 4 IRQ wakeup masking (RW, keep),
 //   bit 3 sleep wakeup enable (self-clearing), bits 2-0 Voff: 2.6 V + code * 0.1 V.
@@ -1183,7 +1183,7 @@ static int axp_set_voff(int code)
     return ((check & 0x07) == code) ? 0 : -2;
 }
 
-// AXP221 datasheet v1.2, REG B8H:
+// AXP223 datasheet v1.1 / AXP221 v1.2, REG B8H:
 //   bit 7 fuel gauge enable, bit 6 coulomb counter enable,
 //   bit 5 battery total capacity correction enable (RW, persistent switch),
 //   bit 4 correction status (0: not correcting, 1: correcting).
@@ -2287,7 +2287,7 @@ int main(int argc, char *argv[])
         Uint32 now = SDL_GetTicks();
         // Onion's sleep stops every process (SIGSTOP) and continues them on wake, batmon
         // included, which then reads the battery at its next 15 s check. A long gap
-        // between passes or SIGCONT means we were stopped: query AXP221 immediately and recompute.
+        // between passes or SIGCONT means we were stopped: query AXP223 immediately and recompute.
         if (sigcont_received || (Sint32)(now - last_pass) > WAKE_GAP_MS) {
             sigcont_received = 0;
             if (bt.state == BT_RUNNING)

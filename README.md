@@ -70,7 +70,7 @@ After that charge, *Total Capacity* shows what your battery really holds (often 
 
 ## More details
 
-Every value in the menu, how the battery chip behaves, the low-battery cut-off and the SD card, and how to build the app: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. Chip registers: [docs/AXP221_REGISTERS.md](docs/AXP221_REGISTERS.md). Version history: [CHANGELOG.md](CHANGELOG.md).
+Every value in the menu, how the battery chip behaves, the low-battery cut-off and the SD card, and how to build the app: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. Chip registers: [docs/AXP223_REGISTERS.md](docs/AXP223_REGISTERS.md). Version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 
