@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3] - 2026-11-12
+
+### Added
+- **Charge Limit** in the battery menu (Mini Plus / Mini Flip): sets the PMIC charge target voltage (REG 33H bits 6-5) to **4.20 V (Full)**, **4.15 V (~95%)** or **4.10 V (~90%)**; 4.35 V is never offered. A lower limit charges less but is easier on the battery. Asked for by a user who expected *Battery Capacity* to cap the charge: that setting only sizes the fuel gauge. Tested on a Mini Plus with RedOnion 4.5.0.
+
+### Changed
+- The settings rows are now 25 px apart, to fit the new row.
+
+---
+
 ## [2.2.3] - 2026-11-09
 
 ### Fixed

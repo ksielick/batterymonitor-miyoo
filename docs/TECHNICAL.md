@@ -69,6 +69,15 @@ Afterwards, set Onion's low-battery shutdown back on for everyday play.
 - **Raising `Voff` to 3.0-3.1 V** leaves more reserve, but it is compared under load: a spike in a demanding game can then cut power while the cell still rests at about 3.2 V.
 - `Voff` (REG 31H, 2.6-3.1 V in 0.1 V steps) is kept while the battery stays connected. Whether it survives a reboot is not confirmed yet.
 
+## Charge Limit (charge target voltage)
+
+`Charge Limit` writes REG 33H bits 6-5, the voltage the charger stops at: `00` = 4.10 V, `01` = 4.15 V, `10` = 4.20 V. The fourth code, 4.35 V, would overcharge the cell: the menu never offers it and the write function refuses it. Only these two bits change; charge enable (bit 7), the end-of-charge current (bit 4) and the charge current (bits 3-0) keep their values.
+
+- Factory value on a Mini Plus: `CAH`, i.e. 4.20 V and 1800 mA. Onion does not write this register.
+- Measured on a Mini Plus (2026-11-10): choosing 4.10 V changed the register from `CAH` to `8AH`, and the menu reads it back.
+- The labels `~90%` and `~95%` are the usual share of a Li-ion cell's capacity at 4.10 V and 4.15 V, not a measurement of this battery.
+- The row always shows the value the PMIC holds (`Now 4.10 V`), so the menu itself tells whether the setting is still in force.
+
 ### Hard power-off and the SD card
 
 A `Voff` cut can damage **files nothing was writing at that moment**:

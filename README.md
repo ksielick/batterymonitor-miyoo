@@ -17,7 +17,7 @@ A better **Battery Monitor** app for Onion OS on the **Miyoo Mini**, **Mini Plus
 
 ## Install
 
-1. Download `BatteryMonitorUI_v2.2_OnionOS.zip` from [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases).
+1. Download the newest `BatteryMonitorUI_v…_OnionOS.zip` from [Releases](https://github.com/ksielick/batterymonitor-miyoo/releases).
 2. Put the SD card in your computer. Optionally, back up the old `App/BatteryMonitorUI` folder.
 3. Copy the `BatteryMonitorUI` folder from the ZIP into `App/` on the card, replacing the old one.
 4. Start **Battery Monitor** from **Apps**.
@@ -64,6 +64,7 @@ After that charge, *Total Capacity* shows what your battery really holds (often 
 ## Good to know
 
 - **Shutdown Voltage:** leave it at **2.9 V** unless you know why you want another value. It is the point where the console cuts power on its own.
+- **Charge Limit:** how full the charger fills the battery. **Full 4.20 V** is the normal setting. **~95% 4.15 V** or **~90% 4.10 V** stop the charge a little earlier: you get a bit less play time per charge, and the battery ages more slowly. Pick one and press `A`. *Battery Capacity* does not limit the charge; it only tells the console how big the battery is.
 - **Battery test:** run it on battery (not charging) with a fair charge left (it needs at least 3.6 V), ideally with Wi-Fi off.
 - **Mini v1-v4:** the graph and history work; the battery menu does not, as these models lack the battery chip it needs.
 - **Not supported:** Miyoo A30 and Miyoo Flip (they don't run Onion).

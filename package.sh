@@ -21,7 +21,7 @@ cp "$ROOT/launch.sh" "$STAGE/launch.sh"
 cp "$ROOT/README.md" "$STAGE/README.md"
 cp "$ROOT/res/"* "$STAGE/res/"
 
-ZIP_NAME="BatteryMonitorUI_${VERSION:-v2.2.3}_OnionOS"
+ZIP_NAME="BatteryMonitorUI_${VERSION:-v2.3}_OnionOS"
 echo "==> Creating release archive: $DIST/$ZIP_NAME.zip"
 rm -f "$DIST/$ZIP_NAME.zip"
 if command -v cygpath >/dev/null 2>&1; then
