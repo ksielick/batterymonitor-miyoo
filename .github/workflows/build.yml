@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Host tests of the PMIC code (system gcc). A failure stops the job before the build,
+      # so no artifact and no release is made from code that fails them.
+      - name: Host tests
+        run: make -C test
+
       - name: Cache ARM GNU toolchain
         id: cache-tc
         uses: actions/cache@v4
