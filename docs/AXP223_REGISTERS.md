@@ -68,6 +68,20 @@ Bits 7-4: warning level 1 (5–20 %); bits 3-0: warning level 2 (0–15 %). Not 
 - The app writes `(old & 0x90) | code`: it keeps bits 7 and 4 and never writes 1 to bits 6, 5 or 3.
 - *Open question:* whether Voff survives a power cycle. The PMIC keeps its registers while the battery is connected, but Onion or the firmware may rewrite REG 31H at boot.
 
+## REG 33H — Charge control 1
+
+AXP221 datasheet v1.2, section 10.2.27 (datasheet default `C6H`). *Observed on Miyoo Mini Plus:* `CAH` out of the box and after a battery disconnect (4.20 V, 1800 mA).
+
+| Bit | Function | R/W | Default |
+|:---|:---|:---|:---|
+| 7 | Charge enable (internal and external path): 0 = off, 1 = on | RW | 1 |
+| 6-5 | **Charge target voltage**: `00` 4.1 V, `01` 4.22 V, `10` **4.2 V (default)**, `11` 4.24 V | RW | `10` |
+| 4 | End-of-charge current: 0 = below 10 % of the set current, 1 = below 15 % | RW | 0 |
+| 3-0 | Charge current: 300 mA + code × 150 mA (`0000` 300 mA … `1111` 2550 mA) | RW | — |
+
+- `Charge Limit` writes bits 6-5 only, and only `00` or `10`.
+- The AXP209 uses `01` = 4.15 V and `11` = 4.36 V in the same register. App v2.3 used those values by mistake; *observed on Miyoo Mini Plus (2026-11-15):* with `01` set (`AAH`) the charge ended at 4.22 V.
+
 ## Telemetry (ADC)
 
 | Register | Quantity | Step |

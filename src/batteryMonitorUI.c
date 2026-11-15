@@ -52,8 +52,9 @@ static int axp_menu_selected = AXP_MENU_CAPACITY;
 static int axp_edit_capacity = 3000;
 static int axp_edit_voff = 3; // REG 31H bits 2-0 code: 0..7 -> 2.6..3.3 V (default 3 = 2.9 V)
 #define AXP_VOFF_CODE_MAX 5   // UI limit: 3.1 V (3.2/3.3 V would waste too much usable capacity)
-static int axp_edit_chgv = 2; // REG 33H bits 6-5 code: 0 = 4.10 V, 1 = 4.15 V, 2 = 4.20 V (3 = 4.35 V, never offered)
-#define AXP_CHGV_CODE_MAX 2   // UI limit: 4.20 V, the cell's rated full voltage
+static int axp_edit_chgv = 2; // REG 33H bits 6-5 code: 0 = 4.10 V, 2 = 4.20 V (1 = 4.22 V and 3 = 4.24 V are never offered)
+// The menu offers, and the write accepts, only 4.10 V and 4.20 V: codes 1 and 3 are above the cell's rated 4.20 V.
+#define AXP_CHGV_CODE_OFFERED(code) ((code) == 0 || (code) == 2)
 static Uint32 axp_last_poll = 0;
 static char axp_feedback_msg[64] = "";
 static Uint32 axp_feedback_until = 0;
@@ -91,17 +92,18 @@ static int voff_code_to_mv(int code)
     return 2600 + code * 100;
 }
 
-// Charge target voltage and the rough share of a full charge it stops at
-// (a Li-ion cell charged to 4.10 V holds about 90%, to 4.15 V about 95%).
+// Charge target voltage of each code (AXP221 datasheet v1.2, section 10.2.27; measured on a Mini Plus: a charge
+// with code 1 ended at 4.22 V), and the rough share of a full charge the two offered codes stop at
+// (a Li-ion cell charged to 4.10 V holds about 90%).
 static int chgv_code_to_mv(int code)
 {
-    static const int mv[4] = {4100, 4150, 4200, 4350};
+    static const int mv[4] = {4100, 4220, 4200, 4240};
     return mv[code & 3];
 }
 
 static const char *chgv_code_to_label(int code)
 {
-    static const char *lbl[4] = {"~90%", "~95%", "Full", "4.35"};
+    static const char *lbl[4] = {"~90%", "Over", "Full", "Over"};
     return lbl[code & 3];
 }
 
@@ -1204,14 +1206,15 @@ static int axp_set_voff(int code)
     return ((check & 0x07) == code) ? 0 : -2;
 }
 
-// AXP223 datasheet v1.1 / AXP221 v1.2, REG 33H (charge control 1):
-//   bit 7 charge enable, bits 6-5 charge target voltage (00 4.10 V, 01 4.15 V, 10 4.20 V, 11 4.35 V),
+// AXP221 datasheet v1.2, section 10.2.27, REG 33H (charge control 1):
+//   bit 7 charge enable, bits 6-5 charge target voltage (00 4.1 V, 01 4.22 V, 10 4.2 V, 11 4.24 V),
 //   bit 4 end-of-charge current (0: 10%, 1: 15% of the set current), bits 3-0 charge current.
-// Only bits 6-5 change; codes above AXP_CHGV_CODE_MAX are refused (4.35 V would overcharge the cell).
+// (4.15 V and 4.35 V, used up to v2.3, are the AXP209's codes 01 and 11, not this chip's.)
+// Only bits 6-5 change; codes 1 and 3 (4.22 V, 4.24 V) are refused: they are above the cell's rated 4.20 V.
 // Returns 0 on success, -1 on I2C failure, -2 when the read-back value differs.
 static int axp_set_charge_voltage(int code)
 {
-    if (!HAS_AXP() || code < 0 || code > AXP_CHGV_CODE_MAX)
+    if (!HAS_AXP() || !AXP_CHGV_CODE_OFFERED(code))
         return -1;
     int fd = open(AXP_I2C_DEV, O_RDWR);
     if (fd < 0) return -1;
@@ -2565,14 +2568,14 @@ int main(int argc, char *argv[])
                     }
                     else if (axp_menu_selected == AXP_MENU_CHGV) {
                         if (keystate[SW_BTN_LEFT] >= PRESSED) {
-                            if (axp_edit_chgv > 0) {
-                                axp_edit_chgv--;
+                            if (axp_edit_chgv != 0) {
+                                axp_edit_chgv = 0;
                                 changed = true;
                             }
                         }
                         else if (keystate[SW_BTN_RIGHT] >= PRESSED) {
-                            if (axp_edit_chgv < AXP_CHGV_CODE_MAX) {
-                                axp_edit_chgv++;
+                            if (axp_edit_chgv != 2) {
+                                axp_edit_chgv = 2;
                                 changed = true;
                             }
                         }
@@ -2642,8 +2645,10 @@ int main(int argc, char *argv[])
                     }
                     if (axp_status.available && axp_status.voff_code >= 0)
                         axp_edit_voff = axp_status.voff_code;
-                    if (axp_status.available && axp_status.chgv_code >= 0 && axp_status.chgv_code <= AXP_CHGV_CODE_MAX)
-                        axp_edit_chgv = axp_status.chgv_code;
+                    // A code the menu does not offer (4.22 V set by v2.3's "~95%", or 4.24 V): the row opens on
+                    // Full, marked as a change to save, and the hint shows the voltage the PMIC holds.
+                    if (axp_status.available && axp_status.chgv_code >= 0)
+                        axp_edit_chgv = AXP_CHGV_CODE_OFFERED(axp_status.chgv_code) ? axp_status.chgv_code : 2;
                     changed = true;
                 }
                 else if (keystate[SW_BTN_B] == PRESSED)

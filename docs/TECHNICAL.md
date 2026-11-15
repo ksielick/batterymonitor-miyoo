@@ -71,12 +71,13 @@ Afterwards, set Onion's low-battery shutdown back on for everyday play.
 
 ## Charge Limit (charge target voltage)
 
-`Charge Limit` writes REG 33H bits 6-5, the voltage the charger stops at: `00` = 4.10 V, `01` = 4.15 V, `10` = 4.20 V. The fourth code, 4.35 V, would overcharge the cell: the menu never offers it and the write function refuses it. Only these two bits change; charge enable (bit 7), the end-of-charge current (bit 4) and the charge current (bits 3-0) keep their values.
+`Charge Limit` writes REG 33H bits 6-5, the voltage the charger stops at: `00` = 4.10 V, `01` = 4.22 V, `10` = 4.20 V, `11` = 4.24 V (AXP221 datasheet v1.2, section 10.2.27). The menu offers `00` and `10` only, and the write function refuses the other two: 4.22 V and 4.24 V are above the cell's rated 4.20 V. Only these two bits change; charge enable (bit 7), the end-of-charge current (bit 4) and the charge current (bits 3-0) keep their values.
 
 - Factory value on a Mini Plus: `CAH`, i.e. 4.20 V and 1800 mA. Onion does not write this register.
 - Measured on a Mini Plus (2026-11-10): choosing 4.10 V changed the register from `CAH` to `8AH`, and the menu reads it back.
-- The labels `~90%` and `~95%` are the usual share of a Li-ion cell's capacity at 4.10 V and 4.15 V, not a measurement of this battery.
+- The label `~90%` is the usual share of a Li-ion cell's capacity at 4.10 V, not a measurement of this battery.
 - The row always shows the value the PMIC holds (`Now 4.10 V`), so the menu itself tells whether the setting is still in force.
+- **v2.3 had the wrong table** (`01` = 4.15 V, `11` = 4.35 V: the AXP209's values) and offered `01` as "~95% 4.15 V". Measured on a Mini Plus (2026-11-15): with `01` set (register `AAH`) the charge ended at 4.22 V. From v2.3.1 a PMIC that holds `01` or `11` shows `Now 4.22 V` or `Now 4.24 V`, and the row opens on Full, marked `*`, ready to save.
 
 ### Hard power-off and the SD card
 

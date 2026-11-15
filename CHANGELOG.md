@@ -16,7 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] - 2026-11-15
+
+### Fixed
+- **Charge Limit: "~95% 4.15 V" really charged to 4.22 V.** v2.3 used the AXP209's voltage table. On the AXP221/AXP223 the codes of REG 33H bits 6-5 are `00` = 4.10 V, `01` = 4.22 V, `10` = 4.20 V, `11` = 4.24 V (AXP221 datasheet v1.2, section 10.2.27). Measured on a Mini Plus: with `01` set the charge ended at 4.22 V. Found by Amiga500.
+  - The menu now offers only **Full 4.20 V** and **~90% 4.10 V**; both always set what they show.
+  - A console still set to the old "~95%" shows `Now 4.22 V`, and the row opens on Full, marked `*`: press `A` to save.
+  - 4.22 V and 4.24 V are never offered and the write refuses them.
+
+---
+
 ## [2.3] - 2026-11-12
+
+> **Wrong in this entry:** "4.15 V (~95%)" set 4.22 V, and the fourth code is 4.24 V, not 4.35 V. Fixed in 2.3.1.
 
 ### Added
 - **Charge Limit** in the battery menu (Mini Plus / Mini Flip): sets the PMIC charge target voltage (REG 33H bits 6-5) to **4.20 V (Full)**, **4.15 V (~95%)** or **4.10 V (~90%)**; 4.35 V is never offered. A lower limit charges less but is easier on the battery. Asked for by a user who expected *Battery Capacity* to cap the charge: that setting only sizes the fuel gauge. Tested on a Mini Plus with RedOnion 4.5.0.
