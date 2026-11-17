@@ -91,12 +91,18 @@ What helps: let the last stretch run asleep, check the card on a PC after any ha
 
 ## Battery Health Test
 
-About 45 s: an idle baseline with the screen dimmed, then both CPU cores at 100 % at 1200 MHz and 1600 MHz. The internal resistance comes from the voltage sag (dV/dI) and is rated EXCELLENT / GOOD / AGED / POOR. It needs at least 3.60 V on battery (no charger), stops below 3.50 V, with the charger or with `[B]`, and always restores the CPU clock, governor and brightness. Turn Wi-Fi off first for the cleanest reading.
+About 45 s (about 60 s on a Mini Plus): an idle baseline with the screen dimmed, then both CPU cores at 100 % at 1200 MHz and 1600 MHz, and on a Mini Plus also 1800 MHz (Onion's `cpuclock` overclock, as DraStic uses it). The internal resistance comes from the voltage sag (dV/dI) at the stage with the largest current step and is rated EXCELLENT / GOOD / AGED / POOR. It needs at least 3.60 V on battery (no charger), stops below 3.50 V, with the charger, with sleep or with `[B]`, and always restores the CPU clock, governor and brightness.
+
+- **Wi-Fi off first.** Wi-Fi draws about 150 mA in uneven bursts and can hide the load step: on a Mini Plus with Wi-Fi on the test read 407 mA idle and 481 mA under load and gave no result ("Load step too small - turn Wi-Fi off and retry"); with Wi-Fi off it read 258 / 408 / 430 mA and 209 mOhm.
+- **Current against clock** (Mini Plus, Wi-Fi off, 2026-11-17): 266 mA idle (screen dimmed), 417 mA at 1200 MHz, 438 mA at 1600 MHz, 449 mA at 1800 MHz, 234 mOhm. Above 1200 MHz the current rises about 5.3 mA per 100 MHz, in a straight line, as expected if the core voltage stays the same at every clock (not measured).
+- **Sleep:** Onion's sleep stops the app (SIGSTOP) and continues it (SIGCONT); the SIGCONT aborts the test with "Interrupted by sleep". A gap of more than 30 s between two passes of the main loop counts as a wake too, as a fallback; slow passes (database, `cpuclock`, the test's own load) are far shorter.
+- **App killed mid-test:** before it changes anything, the test writes the clock, governor and brightness to `/tmp/batterymonitor_bt_restore` (`600 ondemand 100`). `launch.sh` runs `batteryMonitorUI --restore` when the app ends, and every start of the app restores from the file too, so a SIGKILL (Onion's force-quit) leaves neither 1600 MHz nor a dim screen. Onion's `runtime.sh` alone restores only the governor.
 
 ## Graph and session statistics
 
 - `LEFT` projects the remaining time by scaling your past discharge curve to the current session's load.
 - Time asleep or switched off is shown with its length and cost, e.g. `+3h10 OFF/SLEEP -12% (3.8%/H)`; the log alone cannot tell a sleep from a power-off. When the line is too wide, the rate goes first. The session's start date is hidden for now (`SUB_TITLE_SHOW_DATE` in `batteryMonitorUI.h`); when shown, it needs a hardware clock (Mini Plus, Mini Flip).
+- The graph shows only time awake: a sleep or power-off leaves no gap on the time axis, only a step down in the level. `SESSION` counts awake time only. For the newest log entry the app adds the time since batmon last wrote the log, at most 630 s (batmon writes at least every 600 s awake), so a sleep going on in that entry never counts as play time.
 - `AVG` / `MIN` / `BEST` count **finished** sessions only, i.e. sessions that end with the charger plugged in. A running session, even a record one, appears in `BEST` after you plug in.
 - Durations come from Onion's `batmon` log, written when the percentage changes or at least every 10 minutes; a hard power cut can lose the last minutes.
 - Brief charger disconnects (under 60 s) are merged into one charge.
