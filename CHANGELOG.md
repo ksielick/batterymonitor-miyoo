@@ -16,10 +16,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.2] - 2026-11-17
+
+### Fixed
+- **"Set current capacity to 100%" asks first.** It shows the change (`3755 mAh -> 3050 mAh`) and waits for `A`. It refuses while the battery charges or reads below 4.00 V: on a battery that is not full it would make the percentage read too high.
+- **Capacity and counter writes are checked.** The app reads the value back from the PMIC and reports a write the PMIC did not keep, instead of always showing "Saved".
+- **Capacity learning switch keeps the capacity it cannot read.** A failed read of the capacity register was taken for "no capacity set", and the default was written over a good value.
+- **A saved 3000 mAh was shown as 2999 mAh.** The PMIC counts in units of 1.456 mAh, so 3000 mAh is held as 2999.4. A value that is the stored form of a multiple of 50 mAh is now shown as that multiple.
+- **Sleep was drawn as play time in the session that is going on.** On a console whose batmon logs clock times, the graph and the `SESSION` time of the current session counted every sleep as time awake (a 3 h 28 session with 22 h of sleep read `25h35`), and the header showed no sleep. Sleep is now left out of the graph and shown in the header (`+22h05 OFF/SLEEP -2%`), as it already was for finished sessions.
+- **The newest entry no longer counts a sleep as play time** (review point 6). Its live time was the clock since the entry began, so a sleep without a level change went into `SESSION` and the graph, and days switched off could push the rest of the graph off the screen. It is now the logged time plus the time since batmon last wrote the log, at most 630 s (batmon writes every 600 s awake). A sleep going on in the newest entry counts in the header's OFF/SLEEP time.
+- **A slow screen update no longer aborts the battery test** (review point 7). A gap of 2 s between two passes of the main loop was taken for a wake from sleep, so the database, `cpuclock` or the test's own load on both cores could end the test with "Interrupted by sleep". A wake is now SIGCONT (Onion's sleep stops the app and continues it), with a 30 s gap kept only as a fallback.
+- **A battery test killed with SIGKILL no longer leaves 1600 MHz and a dim screen** (review point 8). The test saves the clock, governor and brightness to `/tmp/batterymonitor_bt_restore` before it changes them; `launch.sh` runs `batteryMonitorUI --restore` after the app ends, and every start of the app restores from the file too.
+
+### Changed
+- **The header says `OFF/SLEEP`, not `SLEEP`.** The log alone cannot tell a sleep from a console switched off. A header too wide for the screen drops the sleep rate first, then the date. A rate below 1 %/h has two decimals (2 % over 22 h read `0.0%/H`, now `0.09%/H`).
+- **The header no longer shows the session's start date** (`16.11 05:57`): it read as unclear and took the room the sleep needs. `SUB_TITLE_SHOW_DATE` in `batteryMonitorUI.h` brings it back.
+- **The battery test says what to do when the load step is too small:** "Load step too small - turn Wi-Fi off and retry". On a Mini Plus with Wi-Fi on the test read 407 mA idle and 481 mA under load (no result); with Wi-Fi off 258 mA and 430 mA, 209 mOhm.
+
+### Added
+- **Battery test: a 1800 MHz stage on the Mini Plus**, after 1200 and 1600 MHz (Onion's `cpuclock` overclock, as DraStic uses it), to show how the current scales with the clock. The test then takes about 60 s. The result uses the stage with the largest current step.
+- **Host tests** of the PMIC code (`make -C test`, 30 tests on a simulated AXP223), run by the GitHub build before every artifact and release.
+
+### Measured
+- A full charge at **Full 4.20 V** on a Mini Plus (2026-11-15): the reading climbed to 4.27 V at 1 A, held 4.24-4.25 V while the current fell, the charge stopped at 180 mA (10 % of the 1800 mA setting), and the resting battery read 4.20 V. The reading during a charge is above the battery's own voltage (about 0.2 ohm between them), so 4.2x V on the screen while charging is not an overcharge.
+- A charge at **~90% 4.10 V** from an empty battery (2 %, 3.46 V at 478 mA) on the same Mini Plus (2026-11-17): the reading held 4.13-4.16 V in the constant-voltage phase, the charge stopped at 184 mA after 142 min, the resting battery read 4.09 V, and 1972 mAh went in. The gauge then showed 68 % by its counter and 94 % by voltage (OCV). What share of a full 4.20 V charge this is has not been measured: the two charges started from different states.
+
+The first three fixes and review points 6-8 come from Amiga500's review of RedOnion PR #332.
+
+---
+
 ## [2.3.1] - 2026-11-15
 
 ### Fixed
-- **Charge Limit: "~95% 4.15 V" really charged to 4.22 V.** v2.3 used the AXP209's voltage table. On the AXP221/AXP223 the codes of REG 33H bits 6-5 are `00` = 4.10 V, `01` = 4.22 V, `10` = 4.20 V, `11` = 4.24 V (AXP221 datasheet v1.2, section 10.2.27). Measured on a Mini Plus: with `01` set the charge ended at 4.22 V. Found by Amiga500.
+- **Charge Limit: "~95% 4.15 V" really set a 4.22 V target.** v2.3 used the AXP209's voltage table. On the AXP221/AXP223 the codes of REG 33H bits 6-5 are `00` = 4.10 V, `01` = 4.22 V, `10` = 4.20 V, `11` = 4.24 V (AXP221 datasheet v1.2, section 10.2.27). Found by Amiga500.
   - The menu now offers only **Full 4.20 V** and **~90% 4.10 V**; both always set what they show.
   - A console still set to the old "~95%" shows `Now 4.22 V`, and the row opens on Full, marked `*`: press `A` to save.
   - 4.22 V and 4.24 V are never offered and the write refuses them.

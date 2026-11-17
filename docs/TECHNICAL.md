@@ -77,7 +77,7 @@ Afterwards, set Onion's low-battery shutdown back on for everyday play.
 - Measured on a Mini Plus (2026-11-10): choosing 4.10 V changed the register from `CAH` to `8AH`, and the menu reads it back.
 - The label `~90%` is the usual share of a Li-ion cell's capacity at 4.10 V, not a measurement of this battery.
 - The row always shows the value the PMIC holds (`Now 4.10 V`), so the menu itself tells whether the setting is still in force.
-- **v2.3 had the wrong table** (`01` = 4.15 V, `11` = 4.35 V: the AXP209's values) and offered `01` as "~95% 4.15 V". Measured on a Mini Plus (2026-11-15): with `01` set (register `AAH`) the charge ended at 4.22 V. From v2.3.1 a PMIC that holds `01` or `11` shows `Now 4.22 V` or `Now 4.24 V`, and the row opens on Full, marked `*`, ready to save.
+- **v2.3 had the wrong table** (`01` = 4.15 V, `11` = 4.35 V: the AXP209's values) and offered `01` as "~95% 4.15 V". The end voltage of a charge with `01` set has not been measured. Measured on a Mini Plus (2026-11-15) with `10` set (register `CAH`): the reading rose to 4.27 V at 1 A, held 4.24-4.25 V while the current fell to 180 mA (10 % of the 1800 mA setting, where the charge stopped), and the resting battery read 4.20 V. The reading during a charge is above the battery's own voltage: about 0.2 ohm lies between them (0.28 V step when 1 A of charge turned into 0.35 A of drain). From v2.3.1 a PMIC that holds `01` or `11` shows `Now 4.22 V` or `Now 4.24 V`, and the row opens on Full, marked `*`, ready to save.
 
 ### Hard power-off and the SD card
 
@@ -96,7 +96,7 @@ About 45 s: an idle baseline with the screen dimmed, then both CPU cores at 100 
 ## Graph and session statistics
 
 - `LEFT` projects the remaining time by scaling your past discharge curve to the current session's load.
-- Sleep is logged with its length and cost, e.g. `+3h10 SLEEP -12% (3.8%/H)`. Dates show only on models with a hardware clock (Mini Plus, Mini Flip).
+- Time asleep or switched off is shown with its length and cost, e.g. `+3h10 OFF/SLEEP -12% (3.8%/H)`; the log alone cannot tell a sleep from a power-off. When the line is too wide, the rate goes first. The session's start date is hidden for now (`SUB_TITLE_SHOW_DATE` in `batteryMonitorUI.h`); when shown, it needs a hardware clock (Mini Plus, Mini Flip).
 - `AVG` / `MIN` / `BEST` count **finished** sessions only, i.e. sessions that end with the charger plugged in. A running session, even a record one, appears in `BEST` after you plug in.
 - Durations come from Onion's `batmon` log, written when the percentage changes or at least every 10 minutes; a hard power cut can lose the last minutes.
 - Brief charger disconnects (under 60 s) are merged into one charge.

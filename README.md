@@ -64,7 +64,7 @@ After that charge, *Total Capacity* shows what your battery really holds (often 
 ## Good to know
 
 - **Shutdown Voltage:** leave it at **2.9 V** unless you know why you want another value. It is the point where the console cuts power on its own.
-- **Charge Limit:** how full the charger fills the battery. **Full 4.20 V** is the normal setting. **~90% 4.10 V** stops the charge a little earlier: you get a bit less play time per charge, and the battery ages more slowly. Pick one and press `A`. (v2.3 also had "~95% 4.15 V". That choice really charged to 4.22 V, so it is gone; if you used it, pick Full or ~90% again.) *Battery Capacity* does not limit the charge; it only tells the console how big the battery is.
+- **Charge Limit:** how full the charger fills the battery. **Full 4.20 V** is the normal setting. **~90% 4.10 V** stops the charge a little earlier: you get a bit less play time per charge, and the battery ages more slowly. Pick one and press `A`. (v2.3 also had "~95% 4.15 V". That choice really set a 4.22 V target, so it is gone; if you used it, pick Full or ~90% again.) *Battery Capacity* does not limit the charge; it only tells the console how big the battery is.
 - **Battery test:** run it on battery (not charging) with a fair charge left (it needs at least 3.6 V), ideally with Wi-Fi off.
 - **Mini v1-v4:** the graph and history work; the battery menu does not, as these models lack the battery chip it needs.
 - **Not supported:** Miyoo A30 and Miyoo Flip (they don't run Onion).

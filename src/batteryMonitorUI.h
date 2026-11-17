@@ -35,10 +35,12 @@
 #define DB_CHECK_INTERVAL_MS 15000
 #define DB_SETTLE_MS 1000
 
-// After a wake from sleep (a gap of more than WAKE_GAP_MS between loop passes), check
-// every DB_FAST_CHECK_INTERVAL_MS for WAKE_FAST_CHECK_MS: batmon reads the battery
-// within its 15 s cycle after the wake
-#define WAKE_GAP_MS 2000
+// After a wake from sleep (SIGCONT, or a gap of more than WAKE_GAP_MS between loop passes),
+// check every DB_FAST_CHECK_INTERVAL_MS for WAKE_FAST_CHECK_MS: batmon reads the battery
+// within its 15 s cycle after the wake. The gap is only a fallback for a missed SIGCONT: a slow
+// pass (the log database, cpuclock, the battery test loading both cores) takes seconds, and the
+// 2 s used before aborted the battery test with "Interrupted by sleep".
+#define WAKE_GAP_MS 30000
 #define WAKE_FAST_CHECK_MS 30000
 #define DB_FAST_CHECK_INTERVAL_MS 1000
 
@@ -123,6 +125,8 @@
 
 #define SUB_TITLE_X 255
 #define SUB_TITLE_Y 32
+#define SUB_TITLE_MAX_W 620 // the session line under the title, on a 640 px screen
+#define SUB_TITLE_SHOW_DATE 0 // 1: the session line also shows when the session began
 
 #define LABEL_SESSION_X 100
 #define LABEL_SESSION_Y 439

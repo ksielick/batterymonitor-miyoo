@@ -16,10 +16,16 @@ test_pmic: $(BUILD)/test_pmic
 
 # Register constants and PMIC functions of the app. A function is cut from its first line to the first
 # line that starts with "}" (the sources keep that form; a miss shows as a compile error here).
-$(BUILD)/pmic_fns.c: $(SRC)
+$(BUILD)/pmic_fns.c: $(SRC) ../src/batteryMonitorUI.h
 	@mkdir -p $(BUILD)
-	grep -E '^#define (REG_AXP_|AXP_CHGV_|AXP_READBACK_|AXP_SYNC_|AXP_I2C_DEV)' $(SRC) > $@
+	grep -E '^#define (REG_AXP_|AXP_CHGV_|AXP_READBACK_|AXP_SYNC_|AXP_I2C_DEV|BATMON_MAX_UNWRITTEN_S)' $(SRC) > $@
 	sed -n '/^static int chgv_code_to_mv(/,/^}/p' $(SRC) >> $@
+	sed -n '/^static int axp_units_to_mah(/,/^}/p' $(SRC) >> $@
+	grep -E '^#define WAKE_GAP_MS' ../src/batteryMonitorUI.h >> $@
+	sed -n '/^static int live_duration(/,/^}/p' $(SRC) >> $@
+	sed -n '/^static int is_wake(/,/^}/p' $(SRC) >> $@
+	sed -n '/^static int bt_format_state(/,/^}/p' $(SRC) >> $@
+	sed -n '/^static int bt_parse_state(/,/^}/p' $(SRC) >> $@
 	sed -n '/^static int axp_write_mah16(/,/^}/p' $(SRC) >> $@
 	sed -n '/^static int axp_set_capacity(/,/^}/p' $(SRC) >> $@
 	sed -n '/^static int axp_set_coulomb_counter(/,/^}/p' $(SRC) >> $@

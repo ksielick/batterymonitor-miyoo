@@ -80,7 +80,7 @@ AXP221 datasheet v1.2, section 10.2.27 (datasheet default `C6H`). *Observed on M
 | 3-0 | Charge current: 300 mA + code × 150 mA (`0000` 300 mA … `1111` 2550 mA) | RW | — |
 
 - `Charge Limit` writes bits 6-5 only, and only `00` or `10`.
-- The AXP209 uses `01` = 4.15 V and `11` = 4.36 V in the same register. App v2.3 used those values by mistake; *observed on Miyoo Mini Plus (2026-11-15):* with `01` set (`AAH`) the charge ended at 4.22 V.
+- The AXP209 uses `01` = 4.15 V and `11` = 4.36 V in the same register. App v2.3 used those values by mistake. *Observed on Miyoo Mini Plus (2026-11-15), `10` set (`CAH`):* the voltage reading held 4.24-4.25 V in the constant-voltage phase, the charge stopped at 180 mA (bit 4 = 0: 10 % of 1800 mA), and the resting battery read 4.20 V. The end voltage with `01` has not been measured.
 
 ## Telemetry (ADC)
 
