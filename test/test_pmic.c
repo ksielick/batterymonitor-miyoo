@@ -187,20 +187,22 @@ TEST(charge_voltage_write_fails_cleanly)
     ASSERT_EQ(total_writes, 0);
 }
 
-/* ---- 2. Set current capacity to 100% ---- */
+/* ---- 2. Set counter to 100% (battery full now) ---- */
 
 TEST(sync_only_on_a_full_battery_that_is_not_charging)
 {
-    ASSERT_EQ(axp_sync_check(true, false, 4200), AXP_SYNC_OK);
-    ASSERT_EQ(axp_sync_check(true, false, AXP_SYNC_MIN_MV), AXP_SYNC_OK);
+    ASSERT_EQ(axp_sync_check(true, true, false, 4200), AXP_SYNC_OK);
+    ASSERT_EQ(axp_sync_check(true, true, false, AXP_SYNC_MIN_MV), AXP_SYNC_OK);
+    /* no capacity saved yet: must save row 1 first instead of writing only E2H/E3H */
+    ASSERT_EQ(axp_sync_check(true, false, false, 4200), AXP_SYNC_NO_CAP);
     /* pressed by mistake at 40 %: about 3.7 V */
-    ASSERT_EQ(axp_sync_check(true, false, 3700), AXP_SYNC_NOT_FULL);
-    ASSERT_EQ(axp_sync_check(true, false, AXP_SYNC_MIN_MV - 1), AXP_SYNC_NOT_FULL);
+    ASSERT_EQ(axp_sync_check(true, true, false, 3700), AXP_SYNC_NOT_FULL);
+    ASSERT_EQ(axp_sync_check(true, true, false, AXP_SYNC_MIN_MV - 1), AXP_SYNC_NOT_FULL);
     /* while charging the voltage reads high long before the battery is full
      * (measured: 4.18 V at 87 %, 4.23 V at 95 %) */
-    ASSERT_EQ(axp_sync_check(true, true, 4183), AXP_SYNC_CHARGING);
-    ASSERT_EQ(axp_sync_check(true, true, 4232), AXP_SYNC_CHARGING);
-    ASSERT_EQ(axp_sync_check(false, false, 4200), AXP_SYNC_NO_PMIC);
+    ASSERT_EQ(axp_sync_check(true, true, true, 4183), AXP_SYNC_CHARGING);
+    ASSERT_EQ(axp_sync_check(true, true, true, 4232), AXP_SYNC_CHARGING);
+    ASSERT_EQ(axp_sync_check(false, true, false, 4200), AXP_SYNC_NO_PMIC);
 }
 
 /* ---- 4. enabling capacity learning ---- */
@@ -236,6 +238,37 @@ TEST(learning_seeds_a_capacity_only_on_a_factory_fresh_pmic)
     ASSERT_EQ(get_mah16(0xE0), 2800);
     ASSERT_TRUE(reg[0xE0] & 0x80);
     ASSERT_EQ(reg[0xB8], 0xE0);
+
+    /* E0H bit 7 clear (unconfigured) is seeded too */
+    pmic_reset();
+    reg[0xE0] = 0x05;
+    reg[0xE1] = 0x00;
+    axp_edit_capacity = 2600;
+    ASSERT_EQ(axp_set_calibration(true), 0);
+    ASSERT_EQ(get_mah16(0xE0), 2600);
+    ASSERT_TRUE(reg[0xE0] & 0x80);
+    ASSERT_EQ(reg[0xB8], 0xE0);
+}
+
+TEST(learning_reads_back_the_seeded_capacity)
+{
+    /* 1 initial read of E0H/E1H (0) + 7 stale reads after the write -> 7 delays */
+    pmic_reset();
+    axp_edit_capacity = 2800;
+    pmic_answer_stale(0xE0, 8);
+    ASSERT_EQ(axp_set_calibration(true), 0);
+    ASSERT_EQ(delays, 7);
+    ASSERT_EQ(get_mah16(0xE0), 2800);
+    ASSERT_EQ(reg[0xB8], 0xE0);
+
+    /* stops without enabling learning if the PMIC does not hold the capacity */
+    pmic_reset();
+    axp_edit_capacity = 2800;
+    pmic_answer_stale(0xE0, 1000);
+    ASSERT_EQ(axp_set_calibration(true), -3);
+    ASSERT_EQ(delays, AXP_READBACK_TRIES);
+    ASSERT_EQ(writes[0xB8], 0);
+    ASSERT_EQ(reg[0xB8] & 0x20, 0);
 }
 
 TEST(learning_stops_when_the_seed_cannot_be_written)
@@ -470,6 +503,7 @@ int main(void)
     RUN_TEST(learning_keeps_a_capacity_it_cannot_read);
     RUN_TEST(learning_keeps_a_capacity_that_is_set);
     RUN_TEST(learning_seeds_a_capacity_only_on_a_factory_fresh_pmic);
+    RUN_TEST(learning_reads_back_the_seeded_capacity);
     RUN_TEST(learning_stops_when_the_seed_cannot_be_written);
     RUN_TEST(learning_off_keeps_gauge_counter_and_capacity);
     RUN_TEST(learning_reports_a_pmic_that_did_not_take_the_bit);

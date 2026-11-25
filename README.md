@@ -41,8 +41,8 @@ This makes the battery % steady. Do it in this order:
 
 1. **Charge to 100 %** (until the red light on the console goes off).
 2. Open Battery Monitor, press `SELECT`, set **Battery Capacity** (3000 mAh for the original battery) and press `A`.
-   *Energy Remaining* and *Total Capacity* should now show about the same number. If not, press **Set current capacity to 100%**.
-3. Press **Enable capacity learning** and confirm.
+   *Energy Remaining* and *Total Capacity* should now show about the same number. If not, press **Set counter to 100% (battery full now)**.
+3. Press **Enable capacity learning** and confirm (if you skipped step 2, this dialog can also save the capacity and enable learning together).
 
 That's it. Your battery is probably not as good as new, so the console will learn its real capacity from the next full discharge (see below). Until then, the last few percent may run out a bit early.
 

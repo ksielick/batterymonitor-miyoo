@@ -16,6 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.4] - 2026-11-25
+
+### Fixed
+- **Enabling capacity learning on a fresh PMIC now verifies the capacity write.** When `REG E0H/E1H` held no capacity, *Enable capacity learning* wrote the *Battery Capacity* row's value without showing it in the dialog and without reading it back (on a Mini Plus `E0H/E1H` still answers with the old value for 1-2 s). The dialog now shows the capacity it will save (`1. Saves Capacity: 3000 mAh ...`, button `[A] Save & Enable`, with a warning while charging), saves it with the full read-back check, and stops without enabling learning if the PMIC does not keep the value. When a capacity is already set, the dialog shows it (`1. Capacity is set: 2643 mAh (row 1, press A to change).`) and leaves `E0H/E1H` untouched.
+- **Syncing the counter without a saved capacity is refused.** Pressing the 100 % counter button while `REG E0H/E1H` was 0 wrote `3000 mAh` to the Coulomb counter alone, leaving *Total Capacity* `Not set`. It now asks to save *Battery Capacity* first (`first row, press A`).
+
+### Changed
+- **Clearer first-time PMIC setup labels** (from Mini Plus tester feedback by @robcodedev and Amiga500 in RedOnion PR #332):
+  - *Set current capacity to 100%* now reads **`Set counter to 100% (battery full now)`**, so it is no longer mistaken for saving the battery capacity.
+  - **Unsaved capacity stands out on row 1:** while the PMIC holds no capacity, *Battery Capacity* shows `Not saved` and `< 3000 mAh* >` in orange even when the cursor moves to another row. Once a capacity is set (including a non-round learned value such as `2643 mAh`), the row opens on that value, and an unsaved edit shows `Now 2643 mAh  [A] Save` with `< 2650 mAh* >` in orange.
+
+---
+
 ## [2.3.3] - 2026-11-25
 
 ### Fixed

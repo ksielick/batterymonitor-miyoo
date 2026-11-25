@@ -35,8 +35,8 @@ The menu reads the PMIC once a second while it is open and not at all otherwise;
 Starting from a factory-reset PMIC (battery unplugged for a minute: capacity and counter at 0, learning off):
 1. **Saving a capacity** makes the PMIC fill the counter by itself, from the voltage. It needs no other step.
 2. **Saved while charging**, the voltage reads high, so the counter starts high: it started at 2806 mAh of 2800, the rest of the charge pushed it to 3085 mAh, and **the PMIC never trims it back** to the capacity (CC just stays at 100 %).
-3. **`Set current capacity to 100%`** at a real full charge (charging finished, 4.20 V, 0 mA) sets the counter to the capacity and changes nothing else.
-4. **Enabling learning** sets REG B8H bit 5 and changes nothing else.
+3. **`Set counter to 100% (battery full now)`** at a real full charge (capacity saved, charging finished, >= 4.00 V) sets the counter (`REG E2H/E3H`) to the saved capacity and changes nothing else. Without a saved capacity it refuses and points to row 1.
+4. **Enabling learning** sets REG B8H bit 5. If no capacity is saved yet (`REG E0H/E1H` at 0), the confirmation dialog shows the capacity from row 1 (`[A] Save & Enable`), writes it with the same `15 x 200 ms` read-back check as `Battery Capacity`, and only then sets REG B8H bit 5; if a capacity is already set, `REG E0H/E1H` is left untouched.
 
 Hence the README's order: charge to 100 %, then set the capacity, then enable learning. Changing the capacity later also works; sync to 100 % at the next full charge.
 
