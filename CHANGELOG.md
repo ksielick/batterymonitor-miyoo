@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.3] - 2026-11-25
+
+### Fixed
+- **A sleep that ran the battery down until the console switched itself off showed `-0%`.** The cost of a sleep was counted only up to the next level logged on battery; when the next entry was a charge (the console off at 1 %, then the charger), the drop was lost. It is now counted down to the charge's first level: a 10 h 05 sleep from 100 % reads `-98%`.
+- **A charge across a clock jump showed `38h45`.** After the battery ran flat the clock fell back, and the network set it again in the middle of the next charge, so the clock span of that charge was 37 h too long. A gap of 30 min or more below 95 % with under 2 % per hour gained now counts as a clock jump, and the charge is timed by awake time (`1h45`).
+
+### Changed
+- **Clearer session line** (L1/R1): levels first, then labelled times, e.g. `100% > 2%   PLAY 0H01   SLEEP 10H05 -98%` and `CHARGE 2% > 99%   1H45   +0H20 AT 99%`. It replaces `SESSION: 0H01 (100%-100%) +10H05 OFF/SLEEP -98% (9.7%/H)`, which read as no battery used and touched the L2/R2 icons. A session that ends in such a sleep ends at the level after it. The sleep rate per hour is no longer shown.
+
+---
+
 ## [2.3.2] - 2026-11-17
 
 ### Fixed
